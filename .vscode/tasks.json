@@ -1,0 +1,28 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+        "taskName": "build demó",
+        "type": "shell",
+        "command": "cd build; make -j4",
+        "args": [],
+        "group": {
+            "kind": "build",
+            "isDefault": false
+        },
+        "problemMatcher": "$gcc"
+    },
+    {
+        "taskName": "clean & build demo",
+        "type": "shell",
+        "command": "mkdir build; cd build; rm CMakeCache.txt; cmake .. -DPICO_SDK_PATH=/usr/local/src/pico/pico-sdk -DCMAKE_BUILD_TYPE=Debug; make clean; make -j4",
+        "args": [],
+        "group": {
+            "kind": "build",
+            "isDefault": false
+        },
+        "problemMatcher": "$gcc"
+    }
+}

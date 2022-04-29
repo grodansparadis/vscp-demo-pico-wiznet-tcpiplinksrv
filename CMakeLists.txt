@@ -77,7 +77,7 @@ target_link_libraries(demo
                         )
 
 pico_enable_stdio_usb(demo 1)
-pico_enable_stdio_uart(demo 0)
+pico_enable_stdio_uart(demo 1)
 
 pico_add_extra_outputs(demo)
 
