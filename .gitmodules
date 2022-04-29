@@ -1,0 +1,6 @@
+[submodule "vscp-firmware"]
+	path = vscp-firmware
+	url = https://github.com/grodansparadis/vscp-firmware.git
+[submodule "RP2040-HAT-C"]
+	path = RP2040-HAT-C
+	url = https://github.com/Wiznet/RP2040-HAT-C.git
