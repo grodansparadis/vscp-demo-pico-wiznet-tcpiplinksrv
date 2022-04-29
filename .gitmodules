@@ -4,3 +4,6 @@
 [submodule "RP2040-HAT-C"]
 	path = RP2040-HAT-C
 	url = https://github.com/Wiznet/RP2040-HAT-C.git
+[submodule "vscp-demo-pico-wiznet-tcpiplinksrv"]
+	path = vscp-demo-pico-wiznet-tcpiplinksrv
+	url = https://github.com/grodansparadis/vscp-demo-pico-wiznet-tcpiplinksrv.git
