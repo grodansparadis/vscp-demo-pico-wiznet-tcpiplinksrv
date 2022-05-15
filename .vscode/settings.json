@@ -18,6 +18,7 @@
   },
   "cmake.buildBeforeRun": true,
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-  "cortex-debug.openocdPath": "/home/akhe/development/pico/openocd/src/openocd"
+  "cortex-debug.openocdPath": "/usr/local/src/pico/openocd/src/openocd",
+  "cSpell.words": []
 }
 
