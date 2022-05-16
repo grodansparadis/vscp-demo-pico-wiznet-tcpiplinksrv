@@ -921,6 +921,11 @@ vscp_link_callback_setMask(const void* pdata, vscpEventFilter *pfilter)
   return VSCP_ERROR_SUCCESS; 
 }
 
+/*!
+  \fn vscp_link_callback_statistics
+  \brief Get statistical information
+*/
+
 int
 vscp_link_callback_statistics(const void* pdata, const VSCPStatistics *pStatistics)
 {
@@ -933,6 +938,11 @@ vscp_link_callback_statistics(const void* pdata, const VSCPStatistics *pStatisti
 
   return VSCP_ERROR_SUCCESS;
 }
+
+/*!
+  \fn vscp_link_callback_info
+  \brief Get status info
+*/
 
 int
 vscp_link_callback_info(const void* pdata, const VSCPStatus *pstatus)
