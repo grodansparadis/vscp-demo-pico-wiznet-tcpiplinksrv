@@ -32,7 +32,7 @@ typedef struct {
 	size_t head;
 	size_t tail;
 	size_t size;
-} fifo_t;
+} vscp_fifo_t;
 
 
 /*! 
@@ -44,13 +44,13 @@ typedef struct {
   @param f Pointer to fifo structure
   @param size Size of fifo    
 */
-void fifo_init(fifo_t *f, uint16_t size);
+void vscp_fifo_init(vscp_fifo_t *f, uint16_t size);
 
 /*!
   @brief Clear the fifo
   @param f Pointer to fifo structure
 */
-void fifo_clear(fifo_t *f);
+void vscp_fifo_clear(vscp_fifo_t *f);
 
 /*!
   @brief Read a VSCP event from the fifo
@@ -58,7 +58,7 @@ void fifo_clear(fifo_t *f);
   @param pev Pointer to pointer to event structure
   @return Non zero if successful
 */
-size_t fifo_read(fifo_t *f, vscpEvent **pev);
+size_t vscp_fifo_read(vscp_fifo_t *f, vscpEvent **pev);
 
 /*!
   @brief Put a VSCP event in the fifo
@@ -66,14 +66,14 @@ size_t fifo_read(fifo_t *f, vscpEvent **pev);
   @param pev Pointer to VSCP event
   @return Non zero if successful
 */
-size_t fifo_write(fifo_t *f, vscpEvent *pev);
+size_t vscp_fifo_write(vscp_fifo_t *f, vscpEvent *pev);
 
 /*!
   @brief Get the number of events in the fifo
   @param f Pointer to fifo structure
   @return Number of events in the fifo
 */
-size_t fifo_getFree(fifo_t *f);
+size_t vscp_fifo_getFree(vscp_fifo_t *f);
 
 #ifdef __cplusplus
 }

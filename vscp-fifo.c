@@ -6,13 +6,11 @@
 #include "vscp-fifo.h"
 
 ///////////////////////////////////////////////////////////////////////////////
-// fifo_init
-//
-// This initializes the FIFO structure with the given buffer and size
+// vscp_fifo_init
 //
 
 void
-fifo_init(fifo_t* f, uint16_t size)
+vscp_fifo_init(vscp_fifo_t* f, uint16_t size)
 {
   f->head = 0;
   f->tail = 0;
@@ -22,11 +20,11 @@ fifo_init(fifo_t* f, uint16_t size)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// fifo_clear
+// vscp_fifo_clear
 //
 
 void
-fifo_clear(fifo_t* f)
+vscp_fifo_clear(vscp_fifo_t* f)
 {
   f->head = 0;
   f->tail = 0;
@@ -43,13 +41,11 @@ fifo_clear(fifo_t* f)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// fifo_read
-//
-// This reads one event from the FIFO
+// vscp_fifo_read
 //
 
 size_t
-fifo_read(fifo_t* f, vscpEvent** pev)
+vscp_fifo_read(vscp_fifo_t* f, vscpEvent** pev)
 {
   if (f->tail != f->head) {            // see if any data is available
     *pev            = f->buf[f->tail]; // grab the event from the fifo
@@ -67,14 +63,11 @@ fifo_read(fifo_t* f, vscpEvent** pev)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// fifo_write
-//
-// This writes one event to the FIFO
-// The number of bytes written is returned
+// vscp_fifo_write
 //
 
 size_t
-fifo_write(fifo_t* f, vscpEvent* pev)
+vscp_fifo_write(vscp_fifo_t* f, vscpEvent* pev)
 {
   uint32_t i;
 
@@ -94,15 +87,11 @@ fifo_write(fifo_t* f, vscpEvent* pev)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// fifo_getFree
-//
-// Get the size of the FIFO
-//
-// The number of bytes that can be written to the fifo is returned
+// vscp_fifo_getFree
 //
 
 size_t
-fifo_getFree(fifo_t* f)
+vscp_fifo_getFree(vscp_fifo_t* f)
 {
   if (f->head < f->tail) {
     return (f->tail - f->head - 1);
@@ -112,4 +101,4 @@ fifo_getFree(fifo_t* f)
   }
 }
 
-// ------------------------------------------------------------------------------
+

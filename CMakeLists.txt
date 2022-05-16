@@ -65,7 +65,8 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/RP2040-HAT-C/libraries)
 add_subdirectory(${MBEDTLS_DIR})
 add_subdirectory(${PORT_DIR})
 
-include_directories( PUBLIC ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common
+include_directories( PUBLIC . 
+                      ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common
                     )
 
 target_link_libraries(demo  

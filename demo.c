@@ -17,6 +17,7 @@
 
 #include <vscp-link-protocol.h>
 #include <vscp.h>
+#include <vscp-fifo.h>
 
 /**
  * ----------------------------------------------------------------------------------------------------
@@ -39,6 +40,8 @@ const uint LED_PIN = 25;
 /* Buffer */
 #define ETHERNET_BUF_MAX_SIZE (1024 * 2)
 
+
+
 /* Socket */
 #define SOCKET_VSCP_LINK_PROTOCOL1    0
 #define SOCKET_VSCP_LINK_PROTOCOL2    1
@@ -50,6 +53,9 @@ const uint LED_PIN = 25;
 #ifndef DATA_BUF_SIZE
 #define DATA_BUF_SIZE 512
 #endif
+
+/* Number of events in the receive fifo */
+#define RECEIVE_FIFO_SIZE 16
 
 #define DEMO_WELCOME_MSG "Welcome to the wiznet pico demo VSCP TCP link protocol node\r\n" \
                          "Copyright (C) 2000-2022 Grodans Paradis AB\r\n"                  \
@@ -70,6 +76,12 @@ static wiz_NetInfo g_net_info = {
   .dns  = { 8, 8, 8, 8 },                         // DNS server
   .dhcp = NETINFO_STATIC                          // DHCP enable/disable
 };
+
+/*!
+  @brief Received event are written to this fifo and
+  is consumed by the VSCP protocol handler.
+*/
+vscp_fifo_t fifoEventIn;
 
 /* Socket context */
 struct _ctx {
@@ -105,6 +117,10 @@ main()
 {
   struct _ctx ctx[MAX_CONNECTIONS]; // Socket context
 
+  /* Initialize */
+
+  int retval = 0;
+
   for (int i = 0; i < MAX_CONNECTIONS; i++) {
     ctx[i].bValidated  = false;
     ctx[i].m_privLevel = 0;
@@ -114,8 +130,7 @@ main()
     memset(ctx[i].user, 0, VSCP_LINK_MAX_USER_NAME_LENGTH);
   }
 
-  /* Initialize */
-  int retval = 0;
+  fifo_init(&fifoEventIn, RECEIVE_FIFO_SIZE);
 
   bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));

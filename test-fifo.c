@@ -10,7 +10,7 @@
 #include "vscp-fifo.h"
 
 void
-addItem(fifo_t* f, int i) 
+addItem(vscp_fifo_t* f, int i) 
 {
   vscpEvent *pev = malloc(sizeof(vscpEvent));
   memset(pev, 0, sizeof(vscpEvent));
@@ -19,7 +19,7 @@ addItem(fifo_t* f, int i)
   pev->sizeData = 3;
   pev->pdata = malloc(3);
   memset(pev->pdata, 0, 3);
-  if (fifo_write(f, pev)) {
+  if (vscp_fifo_write(f, pev)) {
     printf("Written %d\t - ",i);
   }
   else {
@@ -27,19 +27,19 @@ addItem(fifo_t* f, int i)
   }
   printf("   head=%zu ", f->head);
   printf("   tail=%zu ", f->tail);
-  printf("   free=%zu\n", fifo_getFree(f));
+  printf("   free=%zu\n", vscp_fifo_getFree(f));
 }
 
 void
-readItem(fifo_t* f) 
+readItem(vscp_fifo_t* f) 
 {
   vscpEvent *pev;
-  if (fifo_read(f, &pev)) {
+  if (vscp_fifo_read(f, &pev)) {
     printf("Read \t - class = %d ", pev->vscp_class);
     printf("   head=%zu ", f->head);
     printf("   tail=%zu ", f->tail);
     printf("   size=%zu ", f->size);
-    printf("   free=%zu\n",fifo_getFree(f));
+    printf("   free=%zu\n",vscp_fifo_getFree(f));
     free(pev->pdata);
     pev->pdata = NULL;
     free(pev);
@@ -49,16 +49,16 @@ readItem(fifo_t* f)
     printf("   head=%zu ", f->head);
     printf("   tail=%zu ", f->tail);
     printf("   size=%zu ", f->size);
-    printf("   free=%zu\n",fifo_getFree(f));
+    printf("   free=%zu\n",vscp_fifo_getFree(f));
   }
 }
 
 int main()
 {
-  fifo_t f;
+  vscp_fifo_t f;
   
   printf("Init fifo\n");
-  fifo_init(&f, 16);
+  vscp_fifo_init(&f, 16);
 
   for (int i=0; i<16; i++) {
     addItem(&f, i);    
@@ -66,12 +66,12 @@ int main()
 
   for (int i=0; i<20; i++) {
     vscpEvent *pev;
-    if (fifo_read(&f, &pev)) {
+    if (vscp_fifo_read(&f, &pev)) {
       printf("Read %d\t - class = %d ", i, pev->vscp_class);
       printf("   head=%zu ", f.head);
       printf("   tail=%zu ", f.tail);
       printf("   size=%zu ", f.size);
-      printf("   free=%zu\n",fifo_getFree(&f));
+      printf("   free=%zu\n",vscp_fifo_getFree(&f));
       free(pev->pdata);
       pev->pdata = NULL;
       free(pev);
@@ -83,5 +83,5 @@ int main()
   readItem(&f);
 
   printf("Clear fifo\n");
-  fifo_clear(&f);
+  vscp_fifo_clear(&f);
 }
