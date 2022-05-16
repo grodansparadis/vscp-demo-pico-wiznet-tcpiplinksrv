@@ -19,5 +19,11 @@
 */
 #define VSCP_LINK_CUSTOM_HELP_TEXT  0
 
+/*!
+  Size for inout buffer and outputbuffer.
+  Must be at least one for each fifo
+*/
+#define VSCP_LINK_MAX_IN_FIFO_SIZE    10
+#define VSCP_LINK_MAX_OUT_FIFO_SIZE   10
 
 #endif // _VSCP_PROJDEFS_H_

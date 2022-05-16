@@ -9,8 +9,8 @@
 #include <string.h>
 
 #include "port_common.h"
-#include "w5x00_spi.h"
 #include "wizchip_conf.h"
+#include "w5x00_spi.h"
 
 #include "socket.h"
 #include "wizchip_conf.h"
@@ -642,6 +642,7 @@ vscp_link_callback_send(const void* pdata, vscpEventEx* pex)
   // Send event here 
   //    handle buffer full,  VSCP_ERROR_TRM_FULL - VSCP_LINK_MSG_BUFFER_FULL
   //    handle error,        VSCP_ERROR_ERROR    - VSCP_LINK_MSG_ERROR
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////

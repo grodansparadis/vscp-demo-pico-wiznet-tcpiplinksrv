@@ -19,6 +19,9 @@
   "cmake.buildBeforeRun": true,
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "cortex-debug.openocdPath": "/usr/local/src/pico/openocd/src/openocd",
-  "cSpell.words": []
+  "cSpell.words": [],
+  "files.associations": {
+    "port_common.h": "c"
+  }
 }
 

@@ -54,6 +54,8 @@ add_definitions(-DSET_TRUSTED_CERT_IN_SAMPLES)
 
 add_executable(demo
                 demo.c
+                vscp-fifo.h 
+                vscp-fifo.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.h
 )
