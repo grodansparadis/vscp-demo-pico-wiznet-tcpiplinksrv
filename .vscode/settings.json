@@ -21,7 +21,8 @@
   "cortex-debug.openocdPath": "/usr/local/src/pico/openocd/src/openocd",
   "cSpell.words": [],
   "files.associations": {
-    "port_common.h": "c"
+    "port_common.h": "c",
+    "ranges": "c"
   }
 }
 

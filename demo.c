@@ -40,8 +40,6 @@ const uint LED_PIN = 25;
 /* Buffer */
 #define ETHERNET_BUF_MAX_SIZE (1024 * 2)
 
-
-
 /* Socket */
 #define SOCKET_VSCP_LINK_PROTOCOL1    0
 #define SOCKET_VSCP_LINK_PROTOCOL2    1
@@ -54,8 +52,11 @@ const uint LED_PIN = 25;
 #define DATA_BUF_SIZE 512
 #endif
 
-/* Number of events in the receive fifo */
+/* Max number of events in the receive fifo */
 #define RECEIVE_FIFO_SIZE 16
+
+/* Max number of events in each of the transmit fifos */
+#define TRANSMIT_FIFO_SIZE 16
 
 #define DEMO_WELCOME_MSG "Welcome to the wiznet pico demo VSCP TCP link protocol node\r\n" \
                          "Copyright (C) 2000-2022 Grodans Paradis AB\r\n"                  \
@@ -67,6 +68,7 @@ const uint LED_PIN = 25;
  * Variables
  * ----------------------------------------------------------------------------------------------------
  */
+
 /* Network */
 static wiz_NetInfo g_net_info = {
   .mac  = { 0x00, 0x08, 0xDC, 0x12, 0x34, 0x56 }, // MAC address
@@ -77,11 +79,24 @@ static wiz_NetInfo g_net_info = {
   .dhcp = NETINFO_STATIC                          // DHCP enable/disable
 };
 
+/* 
+  GUID for device 
+  This is the GUID that is used to identify the device.
+  Use Ethernet MAC address as base. Can also be set explicitly.
+*/
+static uint8_t device_guid[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 
+                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+                  0x00, 0x00};
+
+// Device version 
+// Major, minor, sub-minor, build/patch
+static uint8_t device_version[4] = {0,0,1,0};                  
+
 /*!
   @brief Received event are written to this fifo and
   is consumed by the VSCP protocol handler.
 */
-vscp_fifo_t fifoEventIn;
+vscp_fifo_t fifoEventsRcv;
 
 /* Socket context */
 struct _ctx {
@@ -89,8 +104,13 @@ struct _ctx {
   uint16_t size;                                // Number of characters in buffer
   uint8_t buf[ETHERNET_BUF_MAX_SIZE];           // Command Buffer
   uint8_t user[VSCP_LINK_MAX_USER_NAME_LENGTH]; // Username storage
+  vscp_fifo_t fifoEventsOut;                    // VSCP event send fifo
   bool bValidated;                              // User is validated
-  uint8_t m_privLevel;                          // User privilege level 0-15
+  uint8_t privLevel;                            // User privilege level 0-15
+  int bRcvLoop;                                 // Receive loop is enabled if non zero
+  vscpEventFilter filter;                       // Filter for events
+  VSCPStatistics statistics;                    // VSCP Statistics
+  VSCPStatus status;                            // VSCP status
 };
 
 /**
@@ -121,16 +141,25 @@ main()
 
   int retval = 0;
 
+  // Use Ethernet mac address as GUID 
+  memcpy(device_guid + 8, g_net_info.mac, 6);
+
   for (int i = 0; i < MAX_CONNECTIONS; i++) {
     ctx[i].bValidated  = false;
-    ctx[i].m_privLevel = 0;
+    ctx[i].privLevel = 0;
+    ctx[i].bRcvLoop    = 0;
     ctx[i].sn          = i;
     ctx[i].size        = 0;
     memset(ctx[i].buf, 0, ETHERNET_BUF_MAX_SIZE);
     memset(ctx[i].user, 0, VSCP_LINK_MAX_USER_NAME_LENGTH);
+    vscp_fifo_init(&ctx[i].fifoEventsOut, TRANSMIT_FIFO_SIZE);
+    // Filter: All events received
+    memset(&ctx[i].filter, 0, sizeof(vscpEventFilter));
+    memset(&ctx[i].statistics, 0, sizeof(VSCPStatistics));
+    memset(&ctx[i].status, 0, sizeof(VSCPStatus));
   }
 
-  fifo_init(&fifoEventIn, RECEIVE_FIFO_SIZE);
+  vscp_fifo_init(&fifoEventsRcv, RECEIVE_FIFO_SIZE);
 
   bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));
@@ -261,7 +290,7 @@ set_clock_khz(void)
 }
 
 /******************************************************************************
-                          Send data to client
+                          Write data to client
 ********************************************************************************/
 int32_t
 writeSocket(uint8_t sn, uint8_t* buf, uint16_t size)
@@ -566,12 +595,12 @@ vscp_link_callback_check_password(const void* pdata, const char* arg)
   // }
   if (0 == strcmp(pctx->user, "admin") && 0 == strcmp(p, "secret")) {
     pctx->bValidated = true;
-    pctx->m_privLevel = 15;
+    pctx->privLevel = 15;
   }
   else {
     pctx->user[0]    = '\0';
     pctx->bValidated = false;
-    pctx->m_privLevel = 0;
+    pctx->privLevel = 0;
     writeSocket(pctx->sn, VSCP_LINK_MSG_PASSWORD_ERROR, strlen(VSCP_LINK_MSG_PASSWORD_ERROR));
     return VSCP_ERROR_SUCCESS;
   }
@@ -617,6 +646,42 @@ vscp_link_callback_challenge(const void* pdata, const char* arg)
   return VSCP_ERROR_SUCCESS;
 }
 
+/*!
+*/
+int
+vscp_link_callback_check_authenticated(const void* pdata)
+{
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  if (pctx->bValidated) {
+    return VSCP_ERROR_SUCCESS;
+  }
+
+  return VSCP_ERROR_INVALID_PERMISSION;
+}
+
+/*!
+*/
+int
+vscp_link_callback_check_privilege(const void* pdata, uint8_t priv)
+{
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  if (pctx->privLevel >= priv) {
+    return VSCP_ERROR_SUCCESS;
+  }
+
+  return VSCP_ERROR_INVALID_PERMISSION;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // vscp_link_callback_challenge
 //
@@ -638,26 +703,34 @@ vscp_link_callback_test(const void* pdata, const char* arg)
 //
 
 int
-vscp_link_callback_send(const void* pdata, vscpEventEx* pex)
+vscp_link_callback_send(const void* pdata, vscpEvent* pev)
 {
-  if ((NULL == pdata) && (NULL == pex)) {
+  if ((NULL == pdata) && (NULL == pev)) {
     return VSCP_ERROR_INVALID_POINTER;
   }
 
   struct _ctx* pctx = (struct _ctx*)pdata;
 
-  if (!pctx->bValidated) {
-    return VSCP_ERROR_INVALID_HANDLE;
+  // Filter
+  if (vscp_link_doLevel2Filter(pev, &pctx->filter)) {
+    return VSCP_ERROR_SUCCESS;  // Filter out == OK
   }
 
-  if (pctx->m_privLevel < 4) {
-    return VSCP_ERROR_INVALID_PERMISSION;
+  // Update send statistics
+  pctx->statistics.cntTransmitFrames++;
+  pctx->statistics.cntTransmitData += pev->sizeData;
+
+  // Write event to receive fifo
+  if (!vscp_fifo_write(&fifoEventsRcv, pev)) {
+    pctx->statistics.cntOverruns++;
+    return VSCP_ERROR_TRM_FULL;
   }
 
-  // Send event here 
-  //    handle buffer full,  VSCP_ERROR_TRM_FULL - VSCP_LINK_MSG_BUFFER_FULL
-  //    handle error,        VSCP_ERROR_ERROR    - VSCP_LINK_MSG_ERROR
+  // We own the event from now on and must
+  // delete it and it's data when we are done
+  // with it
 
+  return VSCP_ERROR_SUCCESS;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -665,20 +738,211 @@ vscp_link_callback_send(const void* pdata, vscpEventEx* pex)
 //
 
 int
-vscp_link_callback_retr(const void* pdata, vscpEventEx* pex)
+vscp_link_callback_retr(const void* pdata, vscpEvent* pev)
 {
-  if ((NULL == pdata) && (NULL == pex)) {
+  if ((NULL == pdata) && (NULL == pev)) {
     return VSCP_ERROR_INVALID_POINTER;
   }
 
   struct _ctx* pctx = (struct _ctx*)pdata;
 
-  if (!pctx->bValidated) {
-    return VSCP_ERROR_INVALID_HANDLE;
+  if (!vscp_fifo_read(&pctx->fifoEventsOut, &pev)) {
+    return VSCP_ERROR_RCV_EMPTY;
   }
 
-  if (pctx->m_privLevel < 2) {
-    return VSCP_ERROR_INVALID_PERMISSION;
+  // Update receive statistics
+  pctx->statistics.cntReceiveFrames++;
+  pctx->statistics.cntReceiveData += pev->sizeData;
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+/*!
+  \fn vscp_link_callback_send_vscp_class
+  \brief Enable/disable rcvloop functionality.
+*/
+int
+vscp_link_callback_enable_rcvloop(const void* pdata, int bEnable)
+{
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
   }
 
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  pctx->bRcvLoop = bEnable;
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+/*!
+  \fn vscp_link_callback_get_rcvloop_status
+  \brief Get rcvloop status
+*/
+int
+vscp_link_callback_get_rcvloop_status(const void* pdata)
+{
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  return pctx->bRcvLoop; 
+}
+
+/*!
+  \fn vscp_link_callback_get_rcvloop_status
+  \brief Get rcvloop status
+*/
+
+int
+vscp_link_callback_chkData(const void* pdata)
+{
+  char buf[10];
+
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+  sprintf(buf, "%zu\r\n", TRANSMIT_FIFO_SIZE - vscp_fifo_getFree(&pctx->fifoEventsOut));
+  return VSCP_ERROR_SUCCESS; 
+}
+
+/*!
+  \fn vscp_link_callback_get_channel_id
+  \brief Get channel id
+*/
+
+int
+vscp_link_callback_get_channel_id(const void* pdata)
+{
+  char buf[10];
+
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  sprintf(buf, "%d\r\n", pctx->sn);
+  return VSCP_ERROR_SUCCESS; 
+}
+
+/*!
+  \fn vscp_link_callback_get_guid
+  \brief Get channel id
+*/
+
+int
+vscp_link_callback_get_guid(const void* pdata, uint8_t *pguid)
+{
+  if ((NULL == pdata) || (NULL == pguid)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  memcpy(pguid, device_guid, 16);
+  return VSCP_ERROR_SUCCESS; 
+}
+
+/*!
+  \fn vscp_link_callback_set_guid
+  \brief Get channel id
+*/
+
+int
+vscp_link_callback_set_guid(const void* pdata, uint8_t *pguid)
+{
+  if ((NULL == pdata) || (NULL == pguid)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  memcpy(device_guid, pguid, 16);
+  return VSCP_ERROR_SUCCESS; 
+}
+
+/*!
+  \fn vscp_link_callback_get_version
+  \brief Get device version
+*/
+
+int
+vscp_link_callback_get_version(const void* pdata, uint8_t *pversion)
+{
+  if ((NULL == pdata) || (NULL == pversion)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  memcpy(pversion, device_version, 4);
+  return VSCP_ERROR_SUCCESS; 
+}
+
+
+/*!
+  \fn vscp_link_callback_setFilter
+  \brief Get device version
+*/
+
+int
+vscp_link_callback_setFilter(const void* pdata, vscpEventFilter *pfilter)
+{
+  if ((NULL == pdata) || (NULL == pfilter)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+  pctx->filter.filter_class = pfilter->filter_class;
+  pctx->filter.filter_type = pfilter->filter_type;
+  pctx->filter.filter_priority = pfilter->filter_priority;
+  memcpy(pctx->filter.filter_GUID, pfilter->filter_GUID, 16);
+
+  return VSCP_ERROR_SUCCESS; 
+}
+
+/*!
+  \fn vscp_link_callback_setFilter
+  \brief Get device version
+*/
+
+int
+vscp_link_callback_setMask(const void* pdata, vscpEventFilter *pfilter)
+{
+  if ((NULL == pdata) || (NULL == pfilter)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+  pctx->filter.mask_class = pfilter->mask_class;
+  pctx->filter.mask_type = pfilter->mask_type;
+  pctx->filter.mask_priority = pfilter->mask_priority;
+  memcpy(pctx->filter.mask_GUID, pfilter->mask_GUID, 16);
+
+  return VSCP_ERROR_SUCCESS; 
+}
+
+int
+vscp_link_callback_statistics(const void* pdata, const VSCPStatistics *pStatistics)
+{
+  if ((NULL == pdata) || (NULL == pStatistics)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+  memcpy(&pctx->statistics, pStatistics, sizeof(VSCPStatistics));
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp_link_callback_info(const void* pdata, const VSCPStatus *pstatus)
+{
+  if ((NULL == pdata) || (NULL == pstatus)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+  memcpy(&pctx->status, pstatus, sizeof(VSCPStatus));
+
+  return VSCP_ERROR_SUCCESS;
 }

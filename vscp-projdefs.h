@@ -11,6 +11,16 @@
 
 
 /*!
+  Max buffer for level II events. The buffer size is needed to
+  convert an event to string. To handle all level II events
+  512*5 + 110 = 2670 bytes is needed. In reality this is
+  seldom needed so the value can be set to a lower value. In this
+  case one should check the max data size for events that are of
+  interest and set the max size accordingly 
+*/
+#define VSCP_LINK_MAX_BUF         2670
+
+/*!
   Set to non zero to show custom help. The callback is called so you can respond 
   with your custom help text.  This can be used to save memory if you work 
   on a constraint environment.
