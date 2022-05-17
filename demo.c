@@ -238,7 +238,13 @@ main()
         }
         printf("Buffer after: %s\n", ctx[i].buf);
 
-        vscp_link_parser(&ctx, cmd);
+        if (ctx[i].bRcvLoop) {
+          // Send event to the client if some in the queue
+          writeSocket(ctx[i].sn, (uint8_t*)cmd, strlen(cmd));
+        } 
+        else {
+          vscp_link_parser(&ctx[i], cmd, ctx[i].bRcvLoop);
+        }
 
         // We have a command to handle
         // if (0 == strncmp(ctx[i].buf, "quit\r\n", 6)) {
@@ -953,6 +959,21 @@ vscp_link_callback_info(const void* pdata, const VSCPStatus *pstatus)
 
   struct _ctx* pctx = (struct _ctx*)pdata;
   memcpy(&pctx->status, pstatus, sizeof(VSCPStatus));
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Called when a channel has a rcvloop activated
+ * 
+ * @param pdata 
+ */
+int
+vscp_link_callback_rcvloop(const void* pdata)
+{
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
 
   return VSCP_ERROR_SUCCESS;
 }

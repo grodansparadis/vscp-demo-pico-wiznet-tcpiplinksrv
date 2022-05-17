@@ -36,4 +36,11 @@
 #define VSCP_LINK_MAX_IN_FIFO_SIZE    10
 #define VSCP_LINK_MAX_OUT_FIFO_SIZE   10
 
+/**
+ * Enable command also when rcvloop is active
+ * Only 'quit' and 'quitloop' will work if
+ * set to zero.
+ */
+#define ENABLE_RCVLOOP_CMD  1
+
 #endif // _VSCP_PROJDEFS_H_
