@@ -21,13 +21,18 @@
 #define VSCP_LINK_MAX_BUF         2670
 
 /*!
-  Set to non zero to show custom help. The callback is called so you can respond 
+  Define to show custom help. The callback is called so you can respond 
   with your custom help text.  This can be used to save memory if you work 
   on a constraint environment.
   
   If zero standard help is shown.
 */
-#define VSCP_LINK_CUSTOM_HELP_TEXT  0
+//#define VSCP_LINK_CUSTOM_HELP_TEXT 
+
+/**
+ * Undefine to send incoming events to all clients (default).
+ */
+#define VSCP_LINK_SEND_TO_ALL
 
 /*!
   Size for inout buffer and outputbuffer.
