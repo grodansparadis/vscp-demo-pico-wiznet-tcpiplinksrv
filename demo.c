@@ -3,7 +3,7 @@
 #include "hardware/gpio.h"
 #include "hardware/watchdog.h"
 #include "pico/binary_info.h"
-//#include "hardware/structs/timer.h"
+#include "hardware/structs/timer.h"
 #include "pico/stdlib.h"
 #include <ctype.h>
 #include <stdint.h>
@@ -24,7 +24,7 @@
 
 /**
  * ----------------------------------------------------------------------------------------------------
- * Macros
+ *                                        Macros & Defines
  * ----------------------------------------------------------------------------------------------------
  */
 
@@ -47,28 +47,31 @@ const uint LED_PIN = 25;
 #define SOCKET_VSCP_LINK_PROTOCOL1    0
 #define SOCKET_VSCP_LINK_PROTOCOL2    1
 
-/* Port */
-#define PORT_VSCP_LINK_PROTOCOL 9598
-
-/* DATA_BUF_SIZE define for VSCP TCP link protocol server example */
+/** 
+ * VSCP TCP link protocol character buffer size
+ */
 #ifndef DATA_BUF_SIZE
 #define DATA_BUF_SIZE 512
 #endif
 
-/* Max number of events in the receive fifo */
+/** 
+ * Max number of events in the receive fifo 
+ */
 #define RECEIVE_FIFO_SIZE 16
 
-/* Max number of events in each of the transmit fifos */
+/** 
+ * Max number of events in each of the transmit fifos  
+ */
 #define TRANSMIT_FIFO_SIZE 16
 
-#define DEMO_WELCOME_MSG "Welcome to the wiznet pico demo VSCP TCP link protocol node\r\n" \
+#define DEMO_WELCOME_MSG "Welcome to the wiznet w5100s pico demo VSCP TCP link protocol node\r\n" \
                          "Copyright (C) 2000-2022 Grodans Paradis AB\r\n"                  \
                          "https://www.grodansparadis.com\r\n"                              \
                          "+OK\r\n"
 
 /**
  * ----------------------------------------------------------------------------------------------------
- * Variables
+ *                                        Global Variables
  * ----------------------------------------------------------------------------------------------------
  */
 
@@ -82,26 +85,30 @@ static wiz_NetInfo g_net_info = {
   .dhcp = NETINFO_STATIC                          // DHCP enable/disable
 };
 
-/* 
-  GUID for device 
+/**
+  GUID for device
   This is the GUID that is used to identify the device.
   Use Ethernet MAC address as base. Can also be set explicitly.
 */
-static uint8_t device_guid[16] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 
-                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-                  0x00, 0x00};
+static uint8_t device_guid[16] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-// Device version 
-// Major, minor, sub-minor, build/patch
-static uint8_t device_version[4] = {0,0,1,0};                  
+/**
+ * Device version
+ * Major, minor, sub-minor, build/patch
+ */
+static uint8_t device_version[4] = { 0, 0, 1, 0 };
 
-/*!
-  @brief Received event are written to this fifo and
-  is consumed by the VSCP protocol handler.
+/**
+  Received event are written to this fifo 
+  from all channels and events is consumed by the 
+  VSCP protocol handler.
 */
 vscp_fifo_t fifoEventsIn;
 
-/* Socket context */
+/* 
+  Socket context 
+  This is the context for each open socket/channel.
+*/
 struct _ctx {
   uint8_t sn;                                   // Socket
   uint16_t size;                                // Number of characters in buffer
@@ -169,15 +176,17 @@ main()
   /* Initialize */
   int retval = 0;
 
-  bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol."));
+  bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol on pico with wiznet w5100s."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));
 
   //set_clock_khz();
   stdio_init_all();
 
-  // Enable the watchdog, requiring the watchdog to be updated every 2000ms or
-  // the chip will reboot second arg is pause on debug which means the watchdog
-  // will pause when stepping through code
+  /** 
+   * Enable the watchdog, requiring the watchdog to be updated every 2000ms or
+   * the chip will reboot second arg is pause on debug which means the watchdog
+   * will pause when stepping through code
+   */ 
   watchdog_enable(2000, 1);
 
   gpio_init(LED_PIN);
@@ -229,7 +238,7 @@ main()
 
     /* VSCP TCP link server handler */
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
-      if ((retval = vscp_handleSocketEvents(&ctx[i], PORT_VSCP_LINK_PROTOCOL)) < 0) {
+      if ((retval = vscp_handleSocketEvents(&ctx[i], VSCP_DEFAULT_TCP_PORT)) < 0) {
         printf(" Link error : %d\n", retval);
         while (1) {
           ;
@@ -786,7 +795,7 @@ vscp_link_callback_send(const void* pdata, vscpEvent* pev)
 //
 
 int
-vscp_link_callback_retr(const void* pdata, vscpEvent* pev)
+vscp_link_callback_retr(const void* pdata, vscpEvent** pev)
 {
   if ((NULL == pdata) && (NULL == pev)) {
     return VSCP_ERROR_INVALID_POINTER;
@@ -794,13 +803,13 @@ vscp_link_callback_retr(const void* pdata, vscpEvent* pev)
 
   struct _ctx* pctx = (struct _ctx*)pdata;
 
-  if (!vscp_fifo_read(&pctx->fifoEventsOut, &pev)) {
+  if (!vscp_fifo_read(&pctx->fifoEventsOut, pev)) {
     return VSCP_ERROR_RCV_EMPTY;
   }
 
   // Update receive statistics
   pctx->statistics.cntReceiveFrames++;
-  pctx->statistics.cntReceiveData += pev->sizeData;
+  pctx->statistics.cntReceiveData += (*pev)->sizeData;
 
   return VSCP_ERROR_SUCCESS;
 }
