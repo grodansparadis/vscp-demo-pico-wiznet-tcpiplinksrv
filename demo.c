@@ -571,7 +571,8 @@ vscp_link_callback_help(const void* pdata, const char* arg)
 uint16_t
 vscp_link_callback_get_interface_count(const void* pdata)
 {
-  return 0;
+  /* Return number of interfaces we support */
+  return 1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -579,11 +580,23 @@ vscp_link_callback_get_interface_count(const void* pdata)
 //
 
 int
-vscp_link_callback_get_interface(const void* pdata, uint16_t index, const uint8_t* piface)
+vscp_link_callback_get_interface(const void* pdata, uint16_t index, struct vscp_interface_info *pif)
 {
-  if ((NULL == pdata) && (NULL == piface)) {
+  if ((NULL == pdata) && (NULL == pif)) {
     return VSCP_ERROR_UNKNOWN_ITEM;
   }
+
+  if (index != 0) {
+    return VSCP_ERROR_UNKNOWN_ITEM;
+  }
+
+  // interface-id-n, type, interface-GUID-n, interface_real-name-n
+  // interface types in vscp.h
+
+  pif->idx = index;
+  pif->type = VSCP_INTERFACE_TYPE_INTERNAL;
+  memcpy(pif->guid, device_guid, 16);
+  strncpy(pif->description, "Interface for the device itself", sizeof(pif->description));
 
   // We have no interfaces
   return VSCP_ERROR_SUCCESS;
@@ -1033,7 +1046,6 @@ vscp_link_callback_info(const void* pdata, VSCPStatus *pstatus)
 
 /**
  * @brief Called when a channel has a rcvloop activated
- * 
  * @param pdata 
  */
 int
@@ -1062,3 +1074,72 @@ vscp_link_callback_rcvloop(const void* pdata, vscpEvent *pev)
 
   return VSCP_ERROR_SUCCESS;
 }
+
+
+int
+vscp_link_callback_wcyd(const void* pdata, uint64_t *pwcyd)
+{
+  // Check pointers
+  if ((NULL == pdata) || (NULL == pwcyd)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  *pwcyd = VSCP_SERVER_CAPABILITY_TCPIP | 
+              VSCP_SERVER_CAPABILITY_DECISION_MATRIX | 
+              VSCP_SERVER_CAPABILITY_IP4 | 
+              /*VSCP_SERVER_CAPABILITY_SSL |*/
+              VSCP_SERVER_CAPABILITY_TWO_CONNECTIONS;
+
+  return VSCP_ERROR_SUCCESS;            
+}
+
+/**
+ * @brief Shutdown the system to a safe state
+ * @param pdata Pointer to context
+ */
+
+int
+vscp_link_callback_shutdown(const void* pdata)
+{
+  // Check pointers
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  // At this point
+  // Shutdown the system
+  // Set everything in a safe and inactive state
+
+  // Stay here until someone presses the reset button
+  // or power cycles the board
+  while(1) {
+    watchdog_update();
+  }
+
+  return VSCP_ERROR_SUCCESS; 
+}
+
+/**
+ * @brief Restart the system
+ * @param pdata Pointer to context
+ */
+
+int
+vscp_link_callback_restart(const void* pdata)
+{
+  // Check pointers
+  if (NULL == pdata) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  while(1); // Restart
+
+  return VSCP_ERROR_SUCCESS; 
+}
+

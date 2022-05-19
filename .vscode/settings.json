@@ -22,7 +22,8 @@
   "cSpell.words": [],
   "files.associations": {
     "port_common.h": "c",
-    "ranges": "c"
+    "ranges": "c",
+    "vscp.h": "c"
   }
 }
 
