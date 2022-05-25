@@ -23,7 +23,13 @@
   "files.associations": {
     "port_common.h": "c",
     "ranges": "c",
-    "vscp.h": "c"
+    "vscp.h": "c",
+    "vscp_class.h": "c",
+    "vscp-compiler.h": "c",
+    "vscp-projdefs.h": "c",
+    "vscp-firmware-helper.h": "c",
+    "stdlib.h": "c",
+    "gpio.h": "c"
   }
 }
 

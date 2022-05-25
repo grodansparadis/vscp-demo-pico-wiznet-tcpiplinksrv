@@ -1,10 +1,15 @@
 //#include "pico.h"
 
-#include "hardware/gpio.h"
-#include "hardware/watchdog.h"
-#include "pico/binary_info.h"
-#include "hardware/structs/timer.h"
-#include "pico/stdlib.h"
+#include <hardware/gpio.h>
+#include <hardware/adc.h>
+#include <hardware/watchdog.h>
+#include <hardware/sync.h>
+#include <hardware/flash.h>
+#include <pico/binary_info.h>
+#include <pico/multicore.h>
+#include <pico/mutex.h>
+#include <hardware/structs/timer.h>
+#include <pico/stdlib.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,10 +22,21 @@
 
 #include "socket.h"
 #include "wizchip_conf.h"
+#include "sntp.h"
+#include "timer.h"
 
-#include <vscp-link-protocol.h>
 #include <vscp.h>
 #include <vscp-fifo.h>
+#include <vscp-firmware-helper.h>
+#include <vscp-link-protocol.h>
+#include <vscp-firmware-level2.h>
+
+#include "pico-eeprom.h"
+
+#include "vscp-compiler.h"
+#include "vscp-projdefs.h"
+
+#include "demo.h"
 
 /**
  * ----------------------------------------------------------------------------------------------------
@@ -69,34 +85,60 @@ const uint LED_PIN = 25;
                          "https://www.grodansparadis.com\r\n"                              \
                          "+OK\r\n"
 
+
 /**
  * ----------------------------------------------------------------------------------------------------
  *                                        Global Variables
  * ----------------------------------------------------------------------------------------------------
  */
 
-/* Network */
+/*
+  Core sync
+*/
+volatile bool __otherCoreState; // Use for syncronization between cores
+mutex_t _idleMutex;               // Mutex for idle state
+
+/* 
+  Network 
+
+  Note that the max address is used to construct the device GUID
+*/
 static wiz_NetInfo g_net_info = {
-  .mac  = { 0x00, 0x08, 0xDC, 0x12, 0x34, 0x56 }, // MAC address
+  .mac  = { 0x00, 0x08, 0xDC, 0x12, 0x34, 0x56 }, // MAC address (Also part of GUID)
   .ip   = { 192, 168, 1, 189 },                   // IP address
   .sn   = { 255, 255, 255, 0 },                   // Subnet Mask
   .gw   = { 192, 168, 1, 1 },                     // Gateway
-  .dns  = { 8, 8, 8, 8 },                         // DNS server
+  .dns  = { 8, 8, 8, 8 },                         // DNS server (Default Google public DNS 8.8.8.8)
   .dhcp = NETINFO_STATIC                          // DHCP enable/disable
 };
+
+#ifdef ENABLE_NTP
+
+/* Timezone */
+#define TIMEZONE 2 // Sweden Summertime
+
+/* SNTP */
+#define SOCKET_SNTP 3
+
+static uint8_t g_sntp_buf[ETHERNET_BUF_MAX_SIZE] = {
+    0,
+};
+static uint8_t g_sntp_server_ip[4] = {216, 239, 35, 0}; // time.google.com
+
+#endif
+
+// Flash memory simulated EEPROM
+struct _eeprom_ eeprom;
+
+// Milliseconds timer 
+static volatile uint32_t milliseconds = 0;
 
 /**
   GUID for device
   This is the GUID that is used to identify the device.
   Use Ethernet MAC address as base. Can also be set explicitly.
 */
-static uint8_t device_guid[16] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-/**
- * Device version
- * Major, minor, sub-minor, build/patch
- */
-static uint8_t device_version[4] = { 0, 0, 1, 0 };
+uint8_t device_guid[16] = THIS_FIRMWARE_GUID;
 
 /**
   Received event are written to this fifo 
@@ -166,15 +208,93 @@ setContextDefaults(struct _ctx* pctx)
   memset(&pctx->status, 0, sizeof(VSCPStatus));
 }
 
-/**
- * @brief Main function
- */
+///////////////////////////////////////////////////////////////////////////////
+// repeating_timer_callback
+//
+
+static void repeating_timer_callback(void)
+{
+  milliseconds++;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// getMilliseconds
+//
+
+time_t getMilliseconds(void)
+{
+  return milliseconds;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// idle_other_core
+//
+
+void idle_other_core(void)
+{
+  mutex_enter_blocking(&_idleMutex);
+  __otherCoreState = false;
+  multicore_fifo_push_blocking(_GOTOSLEEP);
+  while (!__otherCoreState) { /* noop */ }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// resume_other_core
+//
+
+void resume_other_core(void)
+{
+  mutex_exit(&_idleMutex);
+  __otherCoreState = false;
+  // Other core will exit busy-loop and return to operation
+  // once __otherCoreIdState == false.
+}
+
+
+#define FLAG_VALUE 123
+
+///////////////////////////////////////////////////////////////////////////////
+// core1_entry
+//
+
+void core1_entry(void) {
+
+    multicore_fifo_push_blocking(FLAG_VALUE);
+
+    uint32_t g = multicore_fifo_pop_blocking();
+
+    if (g != FLAG_VALUE)
+        printf("Hmm, that's not right on core 1!\n");
+    else
+        printf("Its all gone well on core 1!");
+
+    while (1) {
+        tight_loop_contents();
+
+        multicore_fifo_clear_irq();
+        uint32_t status = save_and_disable_interrupts();
+        while (multicore_fifo_rvalid()) {
+          if (_GOTOSLEEP == multicore_fifo_pop_blocking()) {
+            __otherCoreState = true;
+            while (__otherCoreState) { /* noop */ }
+            break;
+          }
+        }
+        restore_interrupts(status);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// main
+//
 
 int
 main()
 {
-  /* Initialize */
-  int retval = 0;
+  // Initialize 
+  int rv = 0;
+  uint32_t start_ms = 0;
+  datetime time;
 
   bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol on pico with wiznet w5100s."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));
@@ -182,12 +302,14 @@ main()
   //set_clock_khz();
   stdio_init_all();
 
+  mutex_init(&_idleMutex);
+
   /** 
    * Enable the watchdog, requiring the watchdog to be updated every 2000ms or
    * the chip will reboot second arg is pause on debug which means the watchdog
    * will pause when stepping through code
    */ 
-  watchdog_enable(2000, 1);
+  //watchdog_enable(5000, 1);
 
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -209,7 +331,38 @@ main()
   }
   else {
     printf("Clean boot\n");
+  }  
+
+#ifdef _DEMO_DEBUG_
+  /* Demo to allow serial software to open port */
+  sleep_ms(2000);
+#endif  
+
+  // Run code on core 1
+  //multicore_launch_core1(core1_entry);
+
+  printf("\n\n\n\n\n\n_________________________________________________\n");
+
+  // Initialize the EEPROM storage
+  if (0 != eeprom_init(&eeprom, FLASH_PAGE_SIZE, (uint8_t *)FLASH_EEPROM_SIM_START)) {
+    printf("EEPROM init failed\n");
   }
+
+  // If eeprom signature is not present initialize persistent storage
+  if ((eeprom_read(&eeprom, FLASH_CTRL_BYTE_MSB) != 0x55) || 
+      (eeprom_read(&eeprom, FLASH_CTRL_BYTE_LSB) != 0xaa)) {
+    printf("Init persistent storage\n");
+    init_persistent_storage();
+    eeprom_write(&eeprom, FLASH_CTRL_BYTE_MSB, 0x55);
+    eeprom_write(&eeprom, FLASH_CTRL_BYTE_LSB, 0xaa);
+    if (eeprom_commit(&eeprom)) {
+      printf("EEPROM init failed\n");
+    }
+  }
+  else {
+    printf("Persistent storage already initialized\n");
+  }
+
 
   /* Initialize TCP/IP stack/chip */
 
@@ -220,32 +373,68 @@ main()
   wizchip_initialize();
   wizchip_check();
 
+  wizchip_1ms_timer_initialize(repeating_timer_callback);
+
   network_initialize(g_net_info);
 
-#ifdef _DEMO_DEBUG_
-  /* Demo to allow serial software to open port */
-  sleep_ms(1000);
-#endif
+#ifdef ENABLE_NTP
+  // Initialize ntp functionality
+  SNTP_init(SOCKET_SNTP, g_sntp_server_ip, TIMEZONE, g_sntp_buf);
+#endif  
 
   /* Get network information */
   print_network_information(g_net_info);
 
   gpio_put(LED_PIN, 0);
 
+  // --------------------------------------------------------------------------
+  //                                   Start NTP
+  // --------------------------------------------------------------------------
+
+#ifdef ENABLE_NTP
+  start_ms = getMilliseconds();
+
+  // Get time
+  do {
+    rv = SNTP_run(&time);
+
+    if (rv == 1) {
+      break;
+    }
+  } while ((getMilliseconds() - start_ms) < RECV_TIMEOUT);
+
+  if (rv != 1) {
+#ifdef _DEMO_DEBUG_    
+    printf(" SNTP failed : %d\n", rv);
+#endif    
+    // Nill yo get defaults on receiving side
+    memset(&time, 0, sizeof(time));
+  }
+
+#ifdef _DEMO_DEBUG_
+  printf("* * * NTP: %d-%02d-%02d, %02d:%02d:%02d\n", time.yy, time.mo, time.dd, time.hh, time.mm, time.ss);
+#endif
+
+#endif  
+
+  // -------------------------------------------------------------------------
+  //                                 End NTP
+  // -------------------------------------------------------------------------
+
   while (1) {
 
     watchdog_update();
 
-    /* VSCP TCP link server handler */
+    // VSCP TCP link server handler 
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
-      if ((retval = vscp_handleSocketEvents(&ctx[i], VSCP_DEFAULT_TCP_PORT)) < 0) {
-        printf(" Link error : %d\n", retval);
+      if ((rv = vscp_handleSocketEvents(&ctx[i], VSCP_DEFAULT_TCP_PORT)) < 0) {
+        printf(" Link error : %d\n", rv);
         while (1) {
           ;
         }
       }
 
-      /* If buf contains a carriage return, we have a command to handle */
+      // If buf contains a carriage return, we have a command to handle 
       char* p = NULL;
       if (NULL != (p = strstr(ctx[i].buf, "\r\n"))) {
 
@@ -289,6 +478,9 @@ main()
 
         // memset(ctx[i].buf, 0, ETHERNET_BUF_MAX_SIZE);
       }
+
+      // Do protocol work here
+      vscp2_do_periodic_work(NULL);
 
       // Handle rcvloop etc
       vscp_link_idle_worker(&ctx[i]);
@@ -486,9 +678,35 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
   return 1;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// init_persistent_storage
+//
+
+void
+init_persistent_storage(void)
+{
+  eeprom_write(&eeprom, REG_DEVICE_ZONE, 11);    // Default Zone = 11
+  eeprom_write(&eeprom, REG_DEVICE_SUBZONE, 22); // Default subzone = 22
+  eeprom_write(&eeprom, REG_LED_CTRL, 0);        // LED Control register.
+
+  eeprom_write(&eeprom, REG_SERIAL_CTRL, 0); // Serial channel control register.
+
+  eeprom_write(&eeprom, REG_IO_CTRL, 0); // I/O Control register.
+
+  eeprom_write(&eeprom, REG_TEMP_CTRL, 1);     // Temp read in degrees C.
+  eeprom_write(&eeprom, REG_TEMP_CORR_MSB, 0); // No correction.
+  eeprom_write(&eeprom, REG_TMP_CORR_LSB, 0);  // No correction.
+  eeprom_write(&eeprom, REG_TMP_INTERVAL, 60); // Report temperature every minute
+
+  eeprom_write(&eeprom, REG_NTP_TIME_ZONE, 2); // NTP time zone = GMT +2
+}
+
 // ****************************************************************************
 //                       VSCP Link protocol callbacks
 // ****************************************************************************
+
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // vscp_link_callback_write_client
@@ -696,7 +914,7 @@ vscp_link_callback_challenge(const void* pdata, const char* arg)
     if (i < sizeof(p)) {
       random_data[i] += (uint8_t)p[i];
     }
-    vscp_link_dec2hex(random_data[i], (char*)p, 2);
+    vscp_fwhlp_dec2hex(random_data[i], (char*)p, 2);
     p++;
   }
 
@@ -771,7 +989,7 @@ vscp_link_callback_send(const void* pdata, vscpEvent* pev)
   struct _ctx* pctx = (struct _ctx*)pdata;
 
   // Filter
-  if (!vscp_link_doLevel2Filter(pev, &pctx->filter)) {
+  if (!vscp_fwhlp_doLevel2Filter(pev, &pctx->filter)) {
     return VSCP_ERROR_SUCCESS;  // Filter out == OK
   }
 
@@ -961,7 +1179,11 @@ vscp_link_callback_get_version(const void* pdata, uint8_t *pversion)
     return VSCP_ERROR_INVALID_POINTER;
   }
 
-  memcpy(pversion, device_version, 4);
+  pversion[0] = THIS_FIRMWARE_MAJOR_VERSION;
+  pversion[1] = THIS_FIRMWARE_MINOR_VERSION;
+  pversion[2] = THIS_FIRMWARE_RELEASE_VERSION;
+  pversion[3] = THIS_FIRMWARE_BUILD_VERSION;
+  
   return VSCP_ERROR_SUCCESS; 
 }
 
@@ -1047,6 +1269,7 @@ vscp_link_callback_info(const void* pdata, VSCPStatus *pstatus)
 /**
  * @brief Called when a channel has a rcvloop activated
  * @param pdata 
+ * @return VS_SUCCESS on success, error code on failure
  */
 int
 vscp_link_callback_rcvloop(const void* pdata, vscpEvent *pev)
@@ -1075,7 +1298,11 @@ vscp_link_callback_rcvloop(const void* pdata, vscpEvent *pev)
   return VSCP_ERROR_SUCCESS;
 }
 
-
+/**
+ * @brief Called when wcyd command is received
+ * @param pdata 
+ * @return VS_SUCCESS on success, error code on failure
+ */
 int
 vscp_link_callback_wcyd(const void* pdata, uint64_t *pwcyd)
 {
@@ -1098,6 +1325,7 @@ vscp_link_callback_wcyd(const void* pdata, uint64_t *pwcyd)
 /**
  * @brief Shutdown the system to a safe state
  * @param pdata Pointer to context
+ * @return VS_SUCCESS on success, error code on failure
  */
 
 int
@@ -1126,6 +1354,7 @@ vscp_link_callback_shutdown(const void* pdata)
 /**
  * @brief Restart the system
  * @param pdata Pointer to context
+ * @return VS_SUCCESS on success, error code on failure
  */
 
 int
@@ -1143,3 +1372,166 @@ vscp_link_callback_restart(const void* pdata)
   return VSCP_ERROR_SUCCESS; 
 }
 
+
+
+
+// ****************************************************************************
+//                        VSCP protocol callbacks
+// ****************************************************************************
+
+
+/**
+ * @brief Get one event fdrom the input queue
+ * @param pdata Pointer to context.
+ * @param pev Pointer te event pointer that will get event (if any).
+ * @return VS_SUCCESS on success, error code on failure
+ */
+int
+vscp2_callback_get_event(const void* pdata, vscpEvent** pev)
+{
+  // Check pointers
+  if ((NULL == pdata) || (NULL == *pev)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  struct _ctx* pctx = (struct _ctx*)pdata;
+
+  if (!vscp_fifo_read(&fifoEventsIn, pev)) {
+    return VSCP_ERROR_RCV_EMPTY;
+  }
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp2_callback_read_reg(const void* pdata, uint32_t reg, uint8_t* pval)
+{
+  // Check pointers
+  if ((NULL == pdata) || (NULL == pval)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Enter bootloader
+ * @param pdata Pointer to context.
+ * @return VS_SUCCESS on success, error code on failure
+ */
+
+int
+vscp2_callback_enter_bootloader(const void* pdata)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Respons to DM info request
+ * @param pdata Pointer to context.
+ * @return VS_SUCCESS on success, error code on failure
+ */
+int
+vscp2_callback_report_dmatrix(const void* pdata)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Response on embedded MDF request.
+ * @param pdata Pointer to context.
+ * @return VS_SUCCESS on success, error code on failure
+ */
+int
+vscp2_callback_report_mdf(const void* pdata)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Response on event interest request.
+ * @param pdata Pointer to context.
+ * @return VS_SUCCESS on success, error code on failure
+ */
+
+int
+vscp2_callback_report_events_of_interest(const void* pdata)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Get timestamp in microseconds
+ * @param pdata Pointer to context.
+ * @return VS_SUCCESS on success, error code on failure
+ */
+uint32_t
+vscp2_callback_get_timestamp(const void* pdata)
+{
+  return time_us_32();
+}
+
+/**
+ * @brief  Set VSCP event time
+ * @param pdata Pointer to context.
+ * @param pev Pointer to event.
+ * @return VS_SUCCESS on success, error code on failure
+ */
+
+int
+vscp2_callback_get_time(const void* pdata, const vscpEvent *pev)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+/**
+ * @brief Get timestamp in milliseconds
+ * @param pdata Pointer to context.
+ * @param pev Event to send
+ * @return VS_SUCCESS on success, error code on failure
+ */
+
+int
+vscp2_callback_send_event(const void* pdata, vscpEvent* pev)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+
+int
+vscp2_callback_restore_defaults(const void *pdata)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp2_callback_write_user_id(const void *pdata, uint8_t pos, uint8_t val)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp2_callback_write_app_reg(const void* pdata, uint32_t reg, uint8_t val)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+/* References for this implementation:
+ * raspberry-pi-pico-c-sdk.pdf, Section '4.1.1. hardware_adc'
+ * pico-examples/adc/adc_console/adc_console.c */
+float read_onboard_temperature(const char unit) {
+    
+    /* 12-bit conversion, assume max value == ADC_VREF == 3.3 V */
+    const float conversionFactor = 3.3f / (1 << 12);
+
+    float adc = (float)adc_read() * conversionFactor;
+    float tempC = 27.0f - (adc - 0.706f) / 0.001721f;
+
+    if (unit == 'C') {
+        return tempC;
+    } else if (unit == 'F') {
+        return tempC * 9 / 5 + 32;
+    }
+
+    return -1.0f;
+}

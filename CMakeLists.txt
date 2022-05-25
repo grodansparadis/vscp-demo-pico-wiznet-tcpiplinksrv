@@ -54,10 +54,18 @@ add_definitions(-DSET_TRUSTED_CERT_IN_SAMPLES)
 
 add_executable(demo
                 demo.c
-                vscp-fifo.h 
-                vscp-fifo.c
+                pico-eeprom.h
+                pico-eeprom.c
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-fifo.h 
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-fifo.c
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-helper.h 
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-helper.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.h
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.c
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.h
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.c
+                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.h
 )
 
 # Add libraries in subdirectories
@@ -71,11 +79,15 @@ include_directories( PUBLIC .
 
 target_link_libraries(demo  
                         pico_stdlib
+                        pico_multicore
                         hardware_spi
                         hardware_dma
+                        hardware_adc
                         ETHERNET_FILES
                         IOLIBRARY_FILES
                         LOOPBACK_FILES
+                        SNTP_FILES
+                        TIMER_FILES
                         )
 
 pico_enable_stdio_usb(demo 1)
