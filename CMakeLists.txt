@@ -56,6 +56,8 @@ add_executable(demo
                 demo.c
                 pico-eeprom.h
                 pico-eeprom.c
+                callbacks-link.c
+                callbacks-vscp-protocol.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-fifo.h 
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-fifo.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-helper.h 

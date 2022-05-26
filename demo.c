@@ -1,3 +1,37 @@
+// FILE: demo.c
+
+/* ******************************************************************************
+ * 	VSCP (Very Simple Control Protocol)
+ * 	https://www.vscp.org
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2000-2022 Ake Hedman, Grodans Paradis AB <info@grodansparadis.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ *	This file is part of VSCP - Very Simple Control Protocol
+ *	https://www.vscp.org
+ *
+ * ******************************************************************************
+ */
+
 //#include "pico.h"
 
 #include <hardware/gpio.h>
@@ -25,65 +59,12 @@
 #include "sntp.h"
 #include "timer.h"
 
-#include <vscp.h>
-#include <vscp-fifo.h>
-#include <vscp-firmware-helper.h>
-#include <vscp-link-protocol.h>
-#include <vscp-firmware-level2.h>
-
 #include "pico-eeprom.h"
 
 #include "vscp-compiler.h"
 #include "vscp-projdefs.h"
 
 #include "demo.h"
-
-/**
- * ----------------------------------------------------------------------------------------------------
- *                                        Macros & Defines
- * ----------------------------------------------------------------------------------------------------
- */
-
-/* VSCP TCP link protocol server test debug message printout enable */
-#define _DEMO_DEBUG_
-
-/* Max number of sockets (WS5100S == 4) */
-#define MAX_CONNECTIONS 2
-
-/* Status LED */
-const uint LED_PIN = 25;
-
-/* Clock */
-#define PLL_SYS_KHZ (133 * 1000)
-
-/* Buffer */
-#define ETHERNET_BUF_MAX_SIZE (1024 * 2)
-
-/* Socket */
-#define SOCKET_VSCP_LINK_PROTOCOL1    0
-#define SOCKET_VSCP_LINK_PROTOCOL2    1
-
-/** 
- * VSCP TCP link protocol character buffer size
- */
-#ifndef DATA_BUF_SIZE
-#define DATA_BUF_SIZE 512
-#endif
-
-/** 
- * Max number of events in the receive fifo 
- */
-#define RECEIVE_FIFO_SIZE 16
-
-/** 
- * Max number of events in each of the transmit fifos  
- */
-#define TRANSMIT_FIFO_SIZE 16
-
-#define DEMO_WELCOME_MSG "Welcome to the wiznet w5100s pico demo VSCP TCP link protocol node\r\n" \
-                         "Copyright (C) 2000-2022 Grodans Paradis AB\r\n"                  \
-                         "https://www.grodansparadis.com\r\n"                              \
-                         "+OK\r\n"
 
 
 /**
@@ -103,7 +84,7 @@ mutex_t _idleMutex;               // Mutex for idle state
 
   Note that the max address is used to construct the device GUID
 */
-static wiz_NetInfo g_net_info = {
+static wiz_NetInfo net_info = {
   .mac  = { 0x00, 0x08, 0xDC, 0x12, 0x34, 0x56 }, // MAC address (Also part of GUID)
   .ip   = { 192, 168, 1, 189 },                   // IP address
   .sn   = { 255, 255, 255, 0 },                   // Subnet Mask
@@ -115,15 +96,15 @@ static wiz_NetInfo g_net_info = {
 #ifdef ENABLE_NTP
 
 /* Timezone */
-#define TIMEZONE 2 // Sweden Summertime
+#define TIMEZONE 0 // GMT is use for VSCP
 
-/* SNTP */
+/* Socket used  for SNTP */
 #define SOCKET_SNTP 3
 
-static uint8_t g_sntp_buf[ETHERNET_BUF_MAX_SIZE] = {
+static uint8_t ntp_buf[ETHERNET_BUF_MAX_SIZE] = {
     0,
 };
-static uint8_t g_sntp_server_ip[4] = {216, 239, 35, 0}; // time.google.com
+static uint8_t sntp_server_ip[4] = {216, 239, 35, 0}; // time.google.com
 
 #endif
 
@@ -147,66 +128,13 @@ uint8_t device_guid[16] = THIS_FIRMWARE_GUID;
 */
 vscp_fifo_t fifoEventsIn;
 
-/* 
-  Socket context 
-  This is the context for each open socket/channel.
-*/
-struct _ctx {
-  uint8_t sn;                                   // Socket
-  uint16_t size;                                // Number of characters in buffer
-  uint8_t buf[ETHERNET_BUF_MAX_SIZE];           // Command Buffer
-  uint8_t user[VSCP_LINK_MAX_USER_NAME_LENGTH]; // Username storage
-  vscp_fifo_t fifoEventsOut;                    // VSCP event send fifo
-  bool bValidated;                              // User is validated
-  uint8_t privLevel;                            // User privilege level 0-15
-  int bRcvLoop;                                 // Receive loop is enabled if non zero
-  vscpEventFilter filter;                       // Filter for events
-  VSCPStatistics statistics;                    // VSCP Statistics
-  VSCPStatus status;                            // VSCP status
-  uint32_t last_rcvloop_time;                   // Time of last received event
-};
-
 struct _ctx ctx[MAX_CONNECTIONS]; // Socket context
 
-/**
- * ----------------------------------------------------------------------------------------------------
- * Functions
- * ----------------------------------------------------------------------------------------------------
- */
-/* Clock */
-static void
-set_clock_khz(void);
 
-// Write data to a connected socket
-int32_t
-writeSocket(uint8_t sn, uint8_t* buf, uint16_t size);
-
-/* VSCP Links Server */
-int32_t
-vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port);
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Set defaults for context structure
- */
 
-void
-setContextDefaults(struct _ctx* pctx)
-{
-  pctx->bValidated        = false;
-  pctx->privLevel         = 0;
-  pctx->bRcvLoop          = 0;
-  pctx->size              = 0;
-  pctx->last_rcvloop_time = time_us_32();
-  vscp_fifo_clear(&pctx->fifoEventsOut);
-  memset(pctx->buf, 0, ETHERNET_BUF_MAX_SIZE);
-  memset(pctx->user, 0, VSCP_LINK_MAX_USER_NAME_LENGTH);  
-  // Filter: All events received
-  memset(&pctx->filter, 0, sizeof(vscpEventFilter));
-  memset(&pctx->statistics, 0, sizeof(VSCPStatistics));
-  memset(&pctx->status, 0, sizeof(VSCPStatus));
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // repeating_timer_callback
@@ -215,15 +143,6 @@ setContextDefaults(struct _ctx* pctx)
 static void repeating_timer_callback(void)
 {
   milliseconds++;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// getMilliseconds
-//
-
-time_t getMilliseconds(void)
-{
-  return milliseconds;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -315,7 +234,7 @@ main()
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
   // Use Ethernet mac address as GUID 
-  memcpy(device_guid + 8, g_net_info.mac, 6);
+  memcpy(device_guid + 8, net_info.mac, 6);
 
   for (int i = 0; i < MAX_CONNECTIONS; i++) {
     ctx[i].sn          = i;
@@ -344,7 +263,7 @@ main()
   printf("\n\n\n\n\n\n_________________________________________________\n");
 
   // Initialize the EEPROM storage
-  if (0 != eeprom_init(&eeprom, FLASH_PAGE_SIZE, (uint8_t *)FLASH_EEPROM_SIM_START)) {
+  if (0 != eeprom_init(&eeprom, FLASH_PAGE_SIZE, (uint8_t *)FLASH_EEPROM_START)) {
     printf("EEPROM init failed\n");
   }
 
@@ -375,15 +294,15 @@ main()
 
   wizchip_1ms_timer_initialize(repeating_timer_callback);
 
-  network_initialize(g_net_info);
+  network_initialize(net_info);
 
 #ifdef ENABLE_NTP
   // Initialize ntp functionality
-  SNTP_init(SOCKET_SNTP, g_sntp_server_ip, TIMEZONE, g_sntp_buf);
+  SNTP_init(SOCKET_SNTP, sntp_server_ip, TIMEZONE, ntp_buf);
 #endif  
 
-  /* Get network information */
-  print_network_information(g_net_info);
+  // Get network information 
+  print_network_information(net_info);
 
   gpio_put(LED_PIN, 0);
 
@@ -496,13 +415,48 @@ main()
   }
 }
 
+
+///////////////////////////////////////////////////////////////////////////////
+// getMilliseconds
+//
+
+time_t getMilliseconds(void)
+{
+  return milliseconds;
+}
+
+
 /**
  * ----------------------------------------------------------------------------------------------------
  * Functions
  * ----------------------------------------------------------------------------------------------------
  */
+
+
+///////////////////////////////////////////////////////////////////////////////
+// setContextDefaults
+// 
+
+void
+setContextDefaults(struct _ctx* pctx)
+{
+  pctx->bValidated        = false;
+  pctx->privLevel         = 0;
+  pctx->bRcvLoop          = 0;
+  pctx->size              = 0;
+  pctx->last_rcvloop_time = time_us_32();
+  vscp_fifo_clear(&pctx->fifoEventsOut);
+  memset(pctx->buf, 0, ETHERNET_BUF_MAX_SIZE);
+  memset(pctx->user, 0, VSCP_LINK_MAX_USER_NAME_LENGTH);  
+  // Filter: All events received
+  memset(&pctx->filter, 0, sizeof(vscpEventFilter));
+  memset(&pctx->statistics, 0, sizeof(VSCPStatistics));
+  memset(&pctx->status, 0, sizeof(VSCPStatus));
+}
+
+
 /* Clock */
-static void
+void
 set_clock_khz(void)
 {
   // set a system clock frequency in khz
@@ -518,10 +472,11 @@ set_clock_khz(void)
   );
 }
 
-/******************************************************************************
-                          Write data to client
-********************************************************************************/
-int32_t
+///////////////////////////////////////////////////////////////////////////////
+// writeSocket
+//
+
+int
 writeSocket(uint8_t sn, uint8_t* buf, uint16_t size)
 {
   int32_t ret;
@@ -557,7 +512,7 @@ vscp_link_callback_writeClient(const void* pdata, const char* msg)
 int32_t
 vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
 {
-  int32_t ret;
+  int32_t rv;
   uint16_t size = 0;
   uint8_t buf[DATA_BUF_SIZE];
 
@@ -592,15 +547,15 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
           size = DATA_BUF_SIZE;
         }
         memset(buf, 0, DATA_BUF_SIZE);
-        ret = recv(pctx->sn, buf, size);
+        rv = recv(pctx->sn, buf, size);
 
         // check SOCKERR_BUSY & SOCKERR_XXX.
         // For showing the occurrence of SOCKERR_BUSY.
-        if (ret <= 0) {
-          return ret;
+        if (rv <= 0) {
+          return rv;
         }
 
-        size = (uint16_t)ret;
+        size = (uint16_t)rv;
 
         // Check that the buffer can hold the new data
         if (pctx->size + size > sizeof(pctx->buf)) {
@@ -634,8 +589,8 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
 #ifdef _DEMO_DEBUG_
       printf("%d:CloseWait\r\n", pctx->sn);
 #endif
-      if ((ret = disconnect(pctx->sn)) != SOCK_OK) {
-        return ret;
+      if ((rv = disconnect(pctx->sn)) != SOCK_OK) {
+        return rv;
       }
 #ifdef _DEMO_DEBUG_
       printf("%d:Socket Closed\r\n", pctx->sn);
@@ -651,8 +606,8 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
 #ifdef _DEMO_DEBUG_
       printf("%d:Listen, VSCP TCP link protocol server, port [%d]\r\n", pctx->sn, port);
 #endif
-      if ((ret = listen(pctx->sn)) != SOCK_OK) {
-        return ret;
+      if ((rv = listen(pctx->sn)) != SOCK_OK) {
+        return rv;
       }
       break;
 
@@ -663,8 +618,8 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
 #ifdef _DEMO_DEBUG_
       printf("%d:VSCP TCP link protocol server, start\r\n", pctx->sn);
 #endif
-      if ((ret = socket(pctx->sn, Sn_MR_TCP, port, 0x00)) != pctx->sn) {
-        return ret;
+      if ((rv = socket(pctx->sn, Sn_MR_TCP, port, 0x00)) != pctx->sn) {
+        return rv;
       }
 #ifdef _DEMO_DEBUG_
       printf("%d:Socket opened\r\n", pctx->sn);
@@ -685,841 +640,39 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port)
 void
 init_persistent_storage(void)
 {
-  eeprom_write(&eeprom, REG_DEVICE_ZONE, 11);    // Default Zone = 11
-  eeprom_write(&eeprom, REG_DEVICE_SUBZONE, 22); // Default subzone = 22
-  eeprom_write(&eeprom, REG_LED_CTRL, 0);        // LED Control register.
-
-  eeprom_write(&eeprom, REG_SERIAL_CTRL, 0); // Serial channel control register.
-
-  eeprom_write(&eeprom, REG_IO_CTRL, 0); // I/O Control register.
-
-  eeprom_write(&eeprom, REG_TEMP_CTRL, 1);     // Temp read in degrees C.
-  eeprom_write(&eeprom, REG_TEMP_CORR_MSB, 0); // No correction.
-  eeprom_write(&eeprom, REG_TMP_CORR_LSB, 0);  // No correction.
-  eeprom_write(&eeprom, REG_TMP_INTERVAL, 60); // Report temperature every minute
-
-  eeprom_write(&eeprom, REG_NTP_TIME_ZONE, 2); // NTP time zone = GMT +2
-}
-
-// ****************************************************************************
-//                       VSCP Link protocol callbacks
-// ****************************************************************************
-
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_write_client
-//
-
-int
-vscp_link_callback_welcome(const void* pdata)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  writeSocket(pctx->sn, DEMO_WELCOME_MSG, strlen(DEMO_WELCOME_MSG));
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_write_client
-//
-
-int
-vscp_link_callback_write_client(const void* pdata, const char* msg)
-{
-  if ((NULL == pdata) && (NULL == msg)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  writeSocket(pctx->sn, (uint8_t*)msg, strlen(msg));
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_quit
-//
-
-int
-vscp_link_callback_quit(const void* pdata)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  // Confirm quit
-  writeSocket(pctx->sn, VSCP_LINK_MSG_GOODBY, strlen(VSCP_LINK_MSG_GOODBY));
-
-  // Disconnect from client
-  disconnect(pctx->sn);
-
-  // Set context defaults
-  setContextDefaults(pctx);
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_help
-//
-
-int
-vscp_link_callback_help(const void* pdata, const char* arg)
-{
-  if ((NULL == pdata) && (NULL == arg)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  writeSocket(pctx->sn, VSCP_LINK_MSG_OK, strlen(VSCP_LINK_MSG_OK));
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_get_interface_count
-//
-
-uint16_t
-vscp_link_callback_get_interface_count(const void* pdata)
-{
-  /* Return number of interfaces we support */
-  return 1;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_get_interface
-//
-
-int
-vscp_link_callback_get_interface(const void* pdata, uint16_t index, struct vscp_interface_info *pif)
-{
-  if ((NULL == pdata) && (NULL == pif)) {
-    return VSCP_ERROR_UNKNOWN_ITEM;
-  }
-
-  if (index != 0) {
-    return VSCP_ERROR_UNKNOWN_ITEM;
-  }
-
-  // interface-id-n, type, interface-GUID-n, interface_real-name-n
-  // interface types in vscp.h
-
-  pif->idx = index;
-  pif->type = VSCP_INTERFACE_TYPE_INTERNAL;
-  memcpy(pif->guid, device_guid, 16);
-  strncpy(pif->description, "Interface for the device itself", sizeof(pif->description));
-
-  // We have no interfaces
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_check_user
-//
-
-int
-vscp_link_callback_check_user(const void* pdata, const char* arg)
-{
-  if ((NULL == pdata) && (NULL == arg)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  // trim
-  const char* p = arg;
-  while (*p && isspace(*p)) {
-    p++;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  strncpy(pctx->user, p, VSCP_LINK_MAX_USER_NAME_LENGTH);
-  writeSocket(pctx->sn, VSCP_LINK_MSG_USENAME_OK, strlen(VSCP_LINK_MSG_USENAME_OK));
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_check_password
-//
-
-int
-vscp_link_callback_check_password(const void* pdata, const char* arg)
-{
-  if ((NULL == pdata) && (NULL == arg)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  // Must have a username before a password
-  if (*(pctx->user) == '\0') {
-    writeSocket(pctx->sn, VSCP_LINK_MSG_NEED_USERNAME, strlen(VSCP_LINK_MSG_NEED_USERNAME));
-    return VSCP_ERROR_SUCCESS;
-  }
-
-  const char* p = arg;
-  while (*p && isspace(*p)) {
-    p++;
-  }
-
-  // if (!pctx->bValidated) {
-
-  // }
-  if (0 == strcmp(pctx->user, "admin") && 0 == strcmp(p, "secret")) {
-    pctx->bValidated = true;
-    pctx->privLevel = 15;
-  }
-  else {
-    pctx->user[0]    = '\0';
-    pctx->bValidated = false;
-    pctx->privLevel = 0;
-    writeSocket(pctx->sn, VSCP_LINK_MSG_PASSWORD_ERROR, strlen(VSCP_LINK_MSG_PASSWORD_ERROR));
-    return VSCP_ERROR_SUCCESS;
-  }
-
-  writeSocket(pctx->sn, VSCP_LINK_MSG_PASSWORD_OK, strlen(VSCP_LINK_MSG_PASSWORD_OK));
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_challenge
-//
-
-int
-vscp_link_callback_challenge(const void* pdata, const char* arg)
-{
-  uint8_t buf[80];
-  uint8_t random_data[32];
-  if ((NULL == pdata) && (NULL == arg)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  const char* p = arg;
-  while (*p && isspace(*p)) {
-    p++;
-  }
-
-  strcpy(buf, "+OK - ");
-  p = buf + strlen(buf);
-
-  for (int i = 0; i < 32; i++) {
-    random_data[i] = rand() >> 16;
-    if (i < sizeof(p)) {
-      random_data[i] += (uint8_t)p[i];
-    }
-    vscp_fwhlp_dec2hex(random_data[i], (char*)p, 2);
-    p++;
-  }
-
-  strcat(buf, "\r\n");
-  writeSocket(pctx->sn, buf, strlen(buf));
-  return VSCP_ERROR_SUCCESS;
-}
-
-/*!
-*/
-int
-vscp_link_callback_check_authenticated(const void* pdata)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  if (pctx->bValidated) {
-    return VSCP_ERROR_SUCCESS;
-  }
-
-  return VSCP_ERROR_INVALID_PERMISSION;
-}
-
-/*!
-*/
-int
-vscp_link_callback_check_privilege(const void* pdata, uint8_t priv)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  if (pctx->privLevel >= priv) {
-    return VSCP_ERROR_SUCCESS;
-  }
-
-  return VSCP_ERROR_INVALID_PERMISSION;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_challenge
-//
-
-int
-vscp_link_callback_test(const void* pdata, const char* arg)
-{
-  if ((NULL == pdata) && (NULL == arg)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  writeSocket(pctx->sn, VSCP_LINK_MSG_OK, strlen(VSCP_LINK_MSG_OK));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_send
-//
-
-int
-vscp_link_callback_send(const void* pdata, vscpEvent* pev)
-{
-  if ((NULL == pdata) && (NULL == pev)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  // Filter
-  if (!vscp_fwhlp_doLevel2Filter(pev, &pctx->filter)) {
-    return VSCP_ERROR_SUCCESS;  // Filter out == OK
-  }
-
-  // Update send statistics
-  pctx->statistics.cntTransmitFrames++;
-  pctx->statistics.cntTransmitData += pev->sizeData;
-
-  // Write event to receive fifo
-  pev->obid = pctx->sn;
-  if (!vscp_fifo_write(&fifoEventsIn, pev)) {
-    pctx->statistics.cntOverruns++;
-    return VSCP_ERROR_TRM_FULL;
-  }
-
-  // Write to send buffer of other interfaces
-  for (int i = 0; i < MAX_CONNECTIONS; i++) {
-    if (pctx->sn != i) {
-      if (!vscp_fifo_write(&ctx[i].fifoEventsOut, pev)) {
-        ctx[i].statistics.cntOverruns++;
-        return VSCP_ERROR_TRM_FULL;
-      }  
-    }  
-  }
-
-  // We own the event from now on and must
-  // delete it and it's data when we are done
-  // with it
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// vscp_link_callback_retr
-//
-
-int
-vscp_link_callback_retr(const void* pdata, vscpEvent** pev)
-{
-  if ((NULL == pdata) && (NULL == pev)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  if (!vscp_fifo_read(&pctx->fifoEventsOut, pev)) {
-    return VSCP_ERROR_RCV_EMPTY;
-  }
-
-  // Update receive statistics
-  pctx->statistics.cntReceiveFrames++;
-  pctx->statistics.cntReceiveData += (*pev)->sizeData;
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/*!
-  \fn vscp_link_callback_send_vscp_class
-  \brief Enable/disable rcvloop functionality.
-*/
-int
-vscp_link_callback_enable_rcvloop(const void* pdata, int bEnable)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  pctx->bRcvLoop = bEnable;
-  pctx->last_rcvloop_time = time_us_32();
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/*!
-  \fn vscp_link_callback_get_rcvloop_status
-  \brief Get rcvloop status
-*/
-int
-vscp_link_callback_get_rcvloop_status(const void* pdata)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  return pctx->bRcvLoop; 
-}
-
-/*!
-  \fn vscp_link_callback_get_rcvloop_status
-  \brief Get rcvloop status
-*/
-
-int
-vscp_link_callback_chkData(const void* pdata, uint16_t* pcount)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  *pcount = TRANSMIT_FIFO_SIZE - vscp_fifo_getFree(&pctx->fifoEventsOut);
-  
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/**
- * 
- * \fn vscp_link_callback_clrAll
- * \brief Clear transmit queue
- */
-
-int
-vscp_link_callback_clrAll(const void* pdata)
-{
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  vscp_fifo_clear(&pctx->fifoEventsOut);
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/*!
-  \fn vscp_link_callback_get_channel_id
-  \brief Get channel id
-*/
-
-int
-vscp_link_callback_get_channel_id(const void* pdata, uint16_t *pchid)
-{
-  if ((NULL == pdata) && (NULL == pchid)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  *pchid = pctx->sn;
-  
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/*!
-  \fn vscp_link_callback_get_guid
-  \brief Get channel id
-*/
-
-int
-vscp_link_callback_get_guid(const void* pdata, uint8_t *pguid)
-{
-  if ((NULL == pdata) || (NULL == pguid)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  memcpy(pguid, device_guid, 16);
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/*!
-  \fn vscp_link_callback_set_guid
-  \brief Get channel id
-*/
-
-int
-vscp_link_callback_set_guid(const void* pdata, uint8_t *pguid)
-{
-  if ((NULL == pdata) || (NULL == pguid)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  memcpy(device_guid, pguid, 16);
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/*!
-  \fn vscp_link_callback_get_version
-  \brief Get device version
-*/
-
-int
-vscp_link_callback_get_version(const void* pdata, uint8_t *pversion)
-{
-  if ((NULL == pdata) || (NULL == pversion)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  pversion[0] = THIS_FIRMWARE_MAJOR_VERSION;
-  pversion[1] = THIS_FIRMWARE_MINOR_VERSION;
-  pversion[2] = THIS_FIRMWARE_RELEASE_VERSION;
-  pversion[3] = THIS_FIRMWARE_BUILD_VERSION;
-  
-  return VSCP_ERROR_SUCCESS; 
-}
-
-
-/*!
-  \fn vscp_link_callback_setFilter
-  \brief Get device version
-*/
-
-int
-vscp_link_callback_setFilter(const void* pdata, vscpEventFilter *pfilter)
-{
-  if ((NULL == pdata) || (NULL == pfilter)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  pctx->filter.filter_class = pfilter->filter_class;
-  pctx->filter.filter_type = pfilter->filter_type;
-  pctx->filter.filter_priority = pfilter->filter_priority;
-  memcpy(pctx->filter.filter_GUID, pfilter->filter_GUID, 16);
-
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/*!
-  \fn vscp_link_callback_setFilter
-  \brief Get device version
-*/
-
-int
-vscp_link_callback_setMask(const void* pdata, vscpEventFilter *pfilter)
-{
-  if ((NULL == pdata) || (NULL == pfilter)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  pctx->filter.mask_class = pfilter->mask_class;
-  pctx->filter.mask_type = pfilter->mask_type;
-  pctx->filter.mask_priority = pfilter->mask_priority;
-  memcpy(pctx->filter.mask_GUID, pfilter->mask_GUID, 16);
-
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/*!
-  \fn vscp_link_callback_statistics
-  \brief Get statistical information
-*/
-
-int
-vscp_link_callback_statistics(const void* pdata, VSCPStatistics *pStatistics)
-{
-  if ((NULL == pdata) || (NULL == pStatistics)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  memcpy(pStatistics, &pctx->statistics, sizeof(VSCPStatistics));
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/*!
-  \fn vscp_link_callback_info
-  \brief Get status info
-*/
-
-int
-vscp_link_callback_info(const void* pdata, VSCPStatus *pstatus)
-{
-  if ((NULL == pdata) || (NULL == pstatus)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-  memcpy(pstatus, &pctx->status, sizeof(VSCPStatus));  
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Called when a channel has a rcvloop activated
- * @param pdata 
- * @return VS_SUCCESS on success, error code on failure
- */
-int
-vscp_link_callback_rcvloop(const void* pdata, vscpEvent *pev)
-{
-  // Check pointer
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  // Every second output '+OK\r\n' in rcvloop mode
-  if ((time_us_32() - pctx->last_rcvloop_time) > 1000000) {
-    pctx->last_rcvloop_time = time_us_32();
-    return VSCP_ERROR_TIMEOUT;
-  }
-
-  if (!vscp_fifo_read(&pctx->fifoEventsOut, &pev)) {
-    return VSCP_ERROR_RCV_EMPTY;
-  }
-
-  // Update receive statistics
-  pctx->statistics.cntReceiveFrames++;
-  pctx->statistics.cntReceiveData += pev->sizeData;
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Called when wcyd command is received
- * @param pdata 
- * @return VS_SUCCESS on success, error code on failure
- */
-int
-vscp_link_callback_wcyd(const void* pdata, uint64_t *pwcyd)
-{
-  // Check pointers
-  if ((NULL == pdata) || (NULL == pwcyd)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  *pwcyd = VSCP_SERVER_CAPABILITY_TCPIP | 
-              VSCP_SERVER_CAPABILITY_DECISION_MATRIX | 
-              VSCP_SERVER_CAPABILITY_IP4 | 
-              /*VSCP_SERVER_CAPABILITY_SSL |*/
-              VSCP_SERVER_CAPABILITY_TWO_CONNECTIONS;
-
-  return VSCP_ERROR_SUCCESS;            
-}
-
-/**
- * @brief Shutdown the system to a safe state
- * @param pdata Pointer to context
- * @return VS_SUCCESS on success, error code on failure
- */
-
-int
-vscp_link_callback_shutdown(const void* pdata)
-{
-  // Check pointers
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  // At this point
-  // Shutdown the system
-  // Set everything in a safe and inactive state
-
-  // Stay here until someone presses the reset button
-  // or power cycles the board
-  while(1) {
-    watchdog_update();
-  }
-
-  return VSCP_ERROR_SUCCESS; 
-}
-
-/**
- * @brief Restart the system
- * @param pdata Pointer to context
- * @return VS_SUCCESS on success, error code on failure
- */
-
-int
-vscp_link_callback_restart(const void* pdata)
-{
-  // Check pointers
-  if (NULL == pdata) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  while(1); // Restart
-
-  return VSCP_ERROR_SUCCESS; 
+  eeprom_write(&eeprom, REG_DEVICE_ZONE, 11);         // Default Zone = 11
+  eeprom_write(&eeprom, REG_DEVICE_SUBZONE, 22);      // Default subzone = 22
+
+  eeprom_write(&eeprom, REG_LED_CTRL, 0x81);          // LED enable. Blink enable.
+  eeprom_write(&eeprom, REG_LED_BLINK_INTERVAL, 5);   // 500 ms ON, 500 ms OFF.
+
+  eeprom_write(&eeprom, REG_IO_CTRL1, 0xff);          // All I/O lines are inputs.
+  eeprom_write(&eeprom, REG_IO_CTRL2, 0x00);          // All I/O line alarms are off.
+
+  eeprom_write(&eeprom, REG_TEMP_CTRL, 0x81);         // Enabled. Temp. in degrees C.
+  eeprom_write(&eeprom, REG_TEMP_CORR_MSB, 0);        // No correction.
+  eeprom_write(&eeprom, REG_TEMP_CORR_LSB, 0);        // No correction.
+  eeprom_write(&eeprom, REG_TEMP_INTERVAL, 30);       // Report temperature half minute
+
+  eeprom_write(&eeprom, REG_ADC0_CTRL, 0);            // No setting for ADC0.
+  eeprom_write(&eeprom, REG_ADC1_CTRL, 0);            // No setting for ADC1.
+  eeprom_write(&eeprom, REG_ADC2_CTRL, 0);            // No setting for ADC2.
 }
 
 
 
 
-// ****************************************************************************
-//                        VSCP protocol callbacks
-// ****************************************************************************
 
 
-/**
- * @brief Get one event fdrom the input queue
- * @param pdata Pointer to context.
- * @param pev Pointer te event pointer that will get event (if any).
- * @return VS_SUCCESS on success, error code on failure
- */
-int
-vscp2_callback_get_event(const void* pdata, vscpEvent** pev)
-{
-  // Check pointers
-  if ((NULL == pdata) || (NULL == *pev)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  struct _ctx* pctx = (struct _ctx*)pdata;
-
-  if (!vscp_fifo_read(&fifoEventsIn, pev)) {
-    return VSCP_ERROR_RCV_EMPTY;
-  }
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-int
-vscp2_callback_read_reg(const void* pdata, uint32_t reg, uint8_t* pval)
-{
-  // Check pointers
-  if ((NULL == pdata) || (NULL == pval)) {
-    return VSCP_ERROR_INVALID_POINTER;
-  }
-
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Enter bootloader
- * @param pdata Pointer to context.
- * @return VS_SUCCESS on success, error code on failure
- */
-
-int
-vscp2_callback_enter_bootloader(const void* pdata)
-{
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Respons to DM info request
- * @param pdata Pointer to context.
- * @return VS_SUCCESS on success, error code on failure
- */
-int
-vscp2_callback_report_dmatrix(const void* pdata)
-{
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Response on embedded MDF request.
- * @param pdata Pointer to context.
- * @return VS_SUCCESS on success, error code on failure
- */
-int
-vscp2_callback_report_mdf(const void* pdata)
-{
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Response on event interest request.
- * @param pdata Pointer to context.
- * @return VS_SUCCESS on success, error code on failure
- */
-
-int
-vscp2_callback_report_events_of_interest(const void* pdata)
-{
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Get timestamp in microseconds
- * @param pdata Pointer to context.
- * @return VS_SUCCESS on success, error code on failure
- */
-uint32_t
-vscp2_callback_get_timestamp(const void* pdata)
-{
-  return time_us_32();
-}
-
-/**
- * @brief  Set VSCP event time
- * @param pdata Pointer to context.
- * @param pev Pointer to event.
- * @return VS_SUCCESS on success, error code on failure
- */
-
-int
-vscp2_callback_get_time(const void* pdata, const vscpEvent *pev)
-{
-  return VSCP_ERROR_SUCCESS;
-}
-
-/**
- * @brief Get timestamp in milliseconds
- * @param pdata Pointer to context.
- * @param pev Event to send
- * @return VS_SUCCESS on success, error code on failure
- */
-
-int
-vscp2_callback_send_event(const void* pdata, vscpEvent* pev)
-{
-  return VSCP_ERROR_SUCCESS;
-}
 
 
-int
-vscp2_callback_restore_defaults(const void *pdata)
-{
-  return VSCP_ERROR_SUCCESS;
-}
 
-int
-vscp2_callback_write_user_id(const void *pdata, uint8_t pos, uint8_t val)
-{
-  return VSCP_ERROR_SUCCESS;
-}
-
-int
-vscp2_callback_write_app_reg(const void* pdata, uint32_t reg, uint8_t val)
-{
-  return VSCP_ERROR_SUCCESS;
-}
 
 /* References for this implementation:
  * raspberry-pi-pico-c-sdk.pdf, Section '4.1.1. hardware_adc'
  * pico-examples/adc/adc_console/adc_console.c */
-float read_onboard_temperature(const char unit) {
+float read_onboard_temperature(const char unit) 
+{
     
     /* 12-bit conversion, assume max value == ADC_VREF == 3.3 V */
     const float conversionFactor = 3.3f / (1 << 12);
@@ -1535,3 +688,4 @@ float read_onboard_temperature(const char unit) {
 
     return -1.0f;
 }
+
