@@ -56,10 +56,6 @@
 // Buffer 
 #define ETHERNET_BUF_MAX_SIZE (1024 * 2)
 
-// Socket 
-#define SOCKET_VSCP_LINK_PROTOCOL1    0
-#define SOCKET_VSCP_LINK_PROTOCOL2    1
-
 /** 
  * VSCP TCP link protocol character buffer size
  */
@@ -111,11 +107,11 @@ static const uint32_t _GOTOSLEEP = 0xC0DED02E;
 //#define ENABLE_DHCP
 
 // Defines for flash variable storage
-#define FLASH_EEPROM_START      (uint8_t *)(0x1FF000)    // Start of EEPROM simulated flash 4096 bytes, (2MB flash)   
-#define FLASH_CTRL_BYTE_MSB     0xFE    // MSB of flash control byte
-#define FLASH_CTRL_BYTE_LSB     0xFF    // LSB of flash control byte   
+#define FLASH_EEPROM_START  (uint8_t*)(0x1FF000) // Start of EEPROM simulated flash 4096 bytes, (2MB flash)
+#define FLASH_CTRL_BYTE_MSB 0xFE                 // MSB of flash control byte
+#define FLASH_CTRL_BYTE_LSB 0xFF                 // LSB of flash control byte
 
-#define NTP_SERVER              "pool.ntp.org"  // https://www.pool.ntp.org/zone/@
+#define NTP_SERVER "pool.ntp.org" // https://www.pool.ntp.org/zone/@
 
 // Register definitions
 
@@ -330,7 +326,7 @@ vscp_handleSocketEvents(struct _ctx* pctx, uint16_t port);
 /** 
  * @brief  Get millisecond timestamp
  */
-time_t getMilliseconds(void);
+time_t getMilliSeconds(void);
 
 
 /**
@@ -351,5 +347,28 @@ void resume_other_core(void);
  */
 void init_persistent_storage(void);
 
+/*!
+ * @brief Get time from NTP server
+ */
+
+void
+getNtpTime(void);
+
+/*!
+  * @brief Get temperature from onboard sensor
+  * @return Temperature in degrees celsius. 
+  */
+
+float
+read_onboard_temperature(void);
+
+/*!
+  * @brief Get ADC value
+  * @param channel ADC channel 0-2
+  * @return Return voltage. 
+  */
+
+float 
+read_adc(uint8_t channel);
 
 #endif  // __VSCP_DEMO_WIZNET_PICO__

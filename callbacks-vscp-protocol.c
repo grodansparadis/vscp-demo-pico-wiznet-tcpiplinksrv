@@ -93,7 +93,7 @@ int vscp2_callback_get_ms(const void* pdata, uint32_t *ptime)
     return VSCP_ERROR_INVALID_POINTER;
   }
 
-  *ptime = getMilliseconds();
+  *ptime = getMilliSeconds();
   return VSCP_ERROR_SUCCESS;
 }
 
@@ -122,80 +122,88 @@ vscp2_callback_get_guid(const void* pdata)
 int
 vscp2_callback_read_user_reg(const void* pdata, uint32_t reg, uint8_t* pval)
 {
-  // Check pointers
+  // Check pointers (pdata allowed to be NULL)
   if (NULL == pval) {
     return VSCP_ERROR_INVALID_POINTER;
   }
 
   if ( REG_DEVICE_ZONE == reg) {
-    *pval = eeprom._data[REG_DEVICE_ZONE];
+    *pval = eeprom_read(&eeprom, REG_DEVICE_ZONE);
   }
   else if ( REG_DEVICE_SUBZONE == reg) {
-    *pval = eeprom._data[REG_DEVICE_SUBZONE];
+    *pval = eeprom_read(&eeprom, REG_DEVICE_SUBZONE);
   }
   else if ( REG_LED_CTRL == reg) {
-    *pval = eeprom._data[REG_LED_CTRL];
+    *pval = eeprom_read(&eeprom, REG_LED_CTRL);
   }
   else if ( REG_LED_STATUS == reg) {
     *pval = gpio_get(LED_PIN);
   }
   else if ( REG_LED_BLINK_INTERVAL == reg) {
-    *pval = eeprom._data[REG_LED_BLINK_INTERVAL];
+    *pval = eeprom_read(&eeprom, REG_LED_BLINK_INTERVAL);
   }
   else if ( REG_IO_CTRL1 == reg) {
-    *pval = eeprom._data[REG_IO_CTRL1];
+    *pval = eeprom_read(&eeprom, REG_IO_CTRL1);
   }
   else if ( REG_IO_CTRL2 == reg) {
-    *pval = eeprom._data[REG_IO_CTRL2];
+    *pval = eeprom_read(&eeprom, REG_IO_CTRL2);
   }
   else if ( REG_IO_STATUS == reg) {
     uint32_t all = gpio_get_all();
     *pval = (all >> 2) & 0xff;
   }
   else if ( REG_TEMP_CTRL == reg) {
-    *pval = eeprom._data[REG_TEMP_CTRL];
+    *pval = eeprom_read(&eeprom, REG_TEMP_CTRL);
   }
   else if ( REG_TEMP_RAW_MSB == reg) {
-    
+    float temp = read_onboard_temperature();
+    *pval = (((uint16_t)(100* temp)) >> 8) & 0xff;
   }
   else if ( REG_TEMP_RAW_LSB == reg) {
-    
+    float temp = read_onboard_temperature();
+    *pval = ((uint16_t)(100* temp)) & 0xff;
   }
   else if ( REG_TEMP_CORR_MSB == reg) {
-    *pval = eeprom._data[REG_TEMP_CORR_MSB];
+    *pval = eeprom_read(&eeprom, REG_TEMP_CORR_MSB);
   }
   else if ( REG_TEMP_CORR_LSB == reg) {
-    *pval = eeprom._data[REG_TEMP_CORR_LSB];
+    *pval = eeprom_read(&eeprom, REG_TEMP_CORR_LSB);
   }
   else if ( REG_TEMP_INTERVAL == reg) {
-    *pval = eeprom._data[REG_TEMP_INTERVAL];
+    *pval = eeprom_read(&eeprom, REG_TEMP_INTERVAL);
   }
   else if ( REG_ADC0_CTRL == reg) {
-    *pval = eeprom._data[REG_ADC0_CTRL];
+    *pval = eeprom_read(&eeprom, REG_ADC0_CTRL);
   }
   else if ( REG_ADC0_MSB == reg) {
-    
+    float adc = read_adc(0);
+    *pval = (((uint16_t)(100* adc)) >> 8) & 0xff;
   }
   else if ( REG_ADC0_LSB == reg) {
-    
+    float adc = read_adc(0);
+    *pval = ((uint16_t)(100* adc)) & 0xff;
   }
   else if ( REG_ADC1_CTRL == reg) {
-    *pval = eeprom._data[REG_ADC0_CTRL];
+    *pval = eeprom_read(&eeprom, REG_ADC0_CTRL);
   }
   else if ( REG_ADC1_MSB == reg) {
-    
+    float adc = read_adc(1);
+    *pval = (((uint16_t)(100* adc)) >> 8) & 0xff;
   }
   else if ( REG_ADC1_LSB == reg) {
-    
+    float adc = read_adc(1);
+    *pval = ((uint16_t)(100* adc)) & 0xff;
   }
   else if ( REG_ADC2_CTRL == reg) {
-    *pval = eeprom._data[REG_ADC0_CTRL];
+    *pval = eeprom_read(&eeprom, REG_ADC0_CTRL);
   }
   else if ( REG_ADC2_MSB == reg) {
-    
+    float adc = read_adc(2);
+    *pval = (((uint16_t)(100* adc)) >> 8) & 0xff;
   }
   else if ( REG_ADC2_LSB == reg) {
-    
+    float adc = read_adc(2);
+    *pval = ((uint16_t)(100* adc)) & 0xff;
   }
   else if ((REG_BOARD_ID0 >= reg) && (REG_BOARD_ID8 <= reg)) {
     pico_unique_board_id_t boardid;
@@ -203,8 +211,10 @@ vscp2_callback_read_user_reg(const void* pdata, uint32_t reg, uint8_t* pval)
     *pval = boardid.id[reg - REG_BOARD_ID0];
   }
   else {
-    return VSCP_ERROR_ERROR;
+    // Invalid register
+    return VSCP_ERROR_PARAMETER;
   }
+
   return VSCP_ERROR_SUCCESS;
 }
 
@@ -222,77 +232,62 @@ int
 vscp2_callback_write_user_reg(const void* pdata, uint32_t reg, uint8_t val)
 {
   if ( REG_DEVICE_ZONE == reg) {
-
+    eeprom_write(&eeprom, REG_DEVICE_ZONE, val);
   }
   else if ( REG_DEVICE_SUBZONE == reg) {
-
+    eeprom_write(&eeprom, REG_DEVICE_SUBZONE, val);
   }
-  else if ( REG_LED_CTRL == reg) {
+  else if ( REG_LED_CTRL == reg) { 
+    eeprom_write(&eeprom, REG_LED_CTRL, val);
     
   }
   else if ( REG_LED_STATUS == reg) {
-    
+    if (val) {
+      gpio_put(LED_PIN, 1);
+    }
+    else {
+      gpio_put(LED_PIN, 0);
+    }
   }
   else if ( REG_LED_BLINK_INTERVAL == reg) {
-    
+    eeprom_write(&eeprom, REG_LED_BLINK_INTERVAL, val);
   }
   else if ( REG_IO_CTRL1 == reg) {
-    
+    eeprom_write(&eeprom, REG_IO_CTRL1, val);
   }
   else if ( REG_IO_CTRL2 == reg) {
-    
+    eeprom_write(&eeprom, REG_IO_CTRL2, val);
   }
   else if ( REG_IO_STATUS == reg) {
     
   }
   else if ( REG_TEMP_CTRL == reg) {
-    
-  }
-  else if ( REG_TEMP_RAW_MSB == reg) {
-    
-  }
-  else if ( REG_TEMP_RAW_LSB == reg) {
-    
+    eeprom_write(&eeprom, REG_TEMP_CTRL, val);
   }
   else if ( REG_TEMP_CORR_MSB == reg) {
-    
+    eeprom_write(&eeprom, REG_TEMP_CORR_MSB, val);
   }
   else if ( REG_TEMP_CORR_LSB == reg) {
-    
+    eeprom_write(&eeprom, REG_TEMP_CORR_LSB, val);
   }
   else if ( REG_TEMP_INTERVAL == reg) {
-    
+    eeprom_write(&eeprom, REG_TEMP_INTERVAL, val);
   }
   else if ( REG_ADC0_CTRL == reg) {
-    
-  }
-  else if ( REG_ADC0_MSB == reg) {
-    
-  }
-  else if ( REG_ADC0_LSB == reg) {
-    
+    eeprom_write(&eeprom, REG_ADC0_CTRL, val);
   }
   else if ( REG_ADC1_CTRL == reg) {
-    
-  }
-  else if ( REG_ADC1_MSB == reg) {
-    
-  }
-  else if ( REG_ADC1_LSB == reg) {
-    
+    eeprom_write(&eeprom, REG_ADC1_CTRL, val);
   }
   else if ( REG_ADC2_CTRL == reg) {
-    
-  }
-  else if ( REG_ADC2_MSB == reg) {
-    
-  }
-  else if ( REG_ADC2_LSB == reg) {
-    
+    eeprom_write(&eeprom, REG_ADC2_CTRL, val);
   }
   else {
-    return VSCP_ERROR_ERROR;
+    return VSCP_ERROR_PARAMETER;
   }
+
+  // Commit changes to 'eeprom'
+  eeprom_commit(&eeprom);
 
   return VSCP_ERROR_SUCCESS;
 }
@@ -381,6 +376,16 @@ vscp2_callback_get_time(const void* pdata, const vscpEvent *pev)
 int
 vscp2_callback_send_event(const void* pdata, vscpEvent* pev)
 {
+  for (int i = 0; i < MAX_CONNECTIONS; i++) {
+    if (vscp_fifo_write(&ctx[i].fifoEventsOut, pev)) {
+      printf("Written to fifo\n");
+    }
+    else {
+      printf("Failed to write to fifo\n");
+      vscp_fwhlp_deleteEvent(&pev);
+    }
+  }
+  
   return VSCP_ERROR_SUCCESS;
 }
 

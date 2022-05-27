@@ -34,16 +34,22 @@
 
 //#include "pico.h"
 
+#include <hardware/structs/timer.h>
+
 #include <hardware/gpio.h>
 #include <hardware/adc.h>
 #include <hardware/watchdog.h>
 #include <hardware/sync.h>
 #include <hardware/flash.h>
+#include <hardware/rtc.h>
+
 #include <pico/binary_info.h>
 #include <pico/multicore.h>
 #include <pico/mutex.h>
-#include <hardware/structs/timer.h>
 #include <pico/stdlib.h>
+
+#include "pico/util/datetime.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -95,11 +101,8 @@ static wiz_NetInfo net_info = {
 
 #ifdef ENABLE_NTP
 
-/* Timezone */
-#define TIMEZONE 0 // GMT is use for VSCP
-
-/* Socket used  for SNTP */
-#define SOCKET_SNTP 3
+// Socket used for SNTP 
+#define SOCKET_SNTP             3
 
 static uint8_t ntp_buf[ETHERNET_BUF_MAX_SIZE] = {
     0,
@@ -113,6 +116,9 @@ struct _eeprom_ eeprom;
 
 // Milliseconds timer 
 static volatile uint32_t milliseconds = 0;
+
+// ADC 12-bit conversion, assume max value == ADC_VREF == 3.3 V 
+static const float conversionFactor = 3.3f / (1 << 12);
 
 /**
   GUID for device
@@ -212,8 +218,6 @@ main()
 {
   // Initialize 
   int rv = 0;
-  uint32_t start_ms = 0;
-  datetime time;
 
   bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol on pico with wiznet w5100s."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));
@@ -221,46 +225,13 @@ main()
   //set_clock_khz();
   stdio_init_all();
 
-  mutex_init(&_idleMutex);
-
-  /** 
-   * Enable the watchdog, requiring the watchdog to be updated every 2000ms or
-   * the chip will reboot second arg is pause on debug which means the watchdog
-   * will pause when stepping through code
-   */ 
-  //watchdog_enable(5000, 1);
-
-  gpio_init(LED_PIN);
-  gpio_set_dir(LED_PIN, GPIO_OUT);
-
-  // Use Ethernet mac address as GUID 
-  memcpy(device_guid + 8, net_info.mac, 6);
-
-  for (int i = 0; i < MAX_CONNECTIONS; i++) {
-    ctx[i].sn          = i;
-    vscp_fifo_init(&ctx[i].fifoEventsOut, TRANSMIT_FIFO_SIZE);
-    setContextDefaults(&ctx[i]);
-  }
-
-  vscp_fifo_init(&fifoEventsIn, RECEIVE_FIFO_SIZE);
-
   if (watchdog_caused_reboot()) {
     printf("Rebooted by Watchdog!\n");
     //return 0;
   }
   else {
     printf("Clean boot\n");
-  }  
-
-#ifdef _DEMO_DEBUG_
-  /* Demo to allow serial software to open port */
-  sleep_ms(2000);
-#endif  
-
-  // Run code on core 1
-  //multicore_launch_core1(core1_entry);
-
-  printf("\n\n\n\n\n\n_________________________________________________\n");
+  }
 
   // Initialize the EEPROM storage
   if (0 != eeprom_init(&eeprom, FLASH_PAGE_SIZE, (uint8_t *)FLASH_EEPROM_START)) {
@@ -282,8 +253,49 @@ main()
     printf("Persistent storage already initialized\n");
   }
 
+  mutex_init(&_idleMutex);
 
-  /* Initialize TCP/IP stack/chip */
+  /** 
+   * Enable the watchdog, requiring the watchdog to be updated every 2000ms or
+   * the chip will reboot second arg is pause on debug which means the watchdog
+   * will pause when stepping through code
+   */ 
+  //watchdog_enable(5000, 1);
+
+  gpio_init(LED_PIN);
+  gpio_set_dir(LED_PIN, GPIO_OUT);
+
+  // Enable GPIO2 - GPIO9
+  gpio_init_mask(0x3FC);
+
+  adc_init();
+  adc_set_temp_sensor_enabled(true);  
+
+  // Use Ethernet mac address as GUID 
+  memcpy(device_guid + 8, net_info.mac, 6);
+
+  for (int i = 0; i < MAX_CONNECTIONS; i++) {
+    ctx[i].sn          = i;
+    vscp_fifo_init(&ctx[i].fifoEventsOut, TRANSMIT_FIFO_SIZE);
+    setContextDefaults(&ctx[i]);
+  }
+
+  vscp_fifo_init(&fifoEventsIn, RECEIVE_FIFO_SIZE);    
+
+#ifdef _DEMO_DEBUG_
+  /* Demo to allow serial software to open port */
+  sleep_ms(2000);
+#endif  
+
+  // Start execution of code on core 1
+  //multicore_launch_core1(core1_entry);
+
+  printf("\n\n\n\n\n\n_________________________________________________\n");
+
+  float temp = read_onboard_temperature();
+  printf("temp = %.02f\n", temp);  
+
+  // Initialize TCP/IP stack/chip 
 
   wizchip_spi_initialize();
   wizchip_cris_initialize();
@@ -298,7 +310,7 @@ main()
 
 #ifdef ENABLE_NTP
   // Initialize ntp functionality
-  SNTP_init(SOCKET_SNTP, sntp_server_ip, TIMEZONE, ntp_buf);
+  SNTP_init(SOCKET_SNTP, sntp_server_ip, 0, ntp_buf);
 #endif  
 
   // Get network information 
@@ -306,39 +318,18 @@ main()
 
   gpio_put(LED_PIN, 0);
 
-  // --------------------------------------------------------------------------
-  //                                   Start NTP
-  // --------------------------------------------------------------------------
-
 #ifdef ENABLE_NTP
-  start_ms = getMilliseconds();
-
-  // Get time
-  do {
-    rv = SNTP_run(&time);
-
-    if (rv == 1) {
-      break;
-    }
-  } while ((getMilliseconds() - start_ms) < RECV_TIMEOUT);
-
-  if (rv != 1) {
-#ifdef _DEMO_DEBUG_    
-    printf(" SNTP failed : %d\n", rv);
-#endif    
-    // Nill yo get defaults on receiving side
-    memset(&time, 0, sizeof(time));
-  }
-
-#ifdef _DEMO_DEBUG_
-  printf("* * * NTP: %d-%02d-%02d, %02d:%02d:%02d\n", time.yy, time.mo, time.dd, time.hh, time.mm, time.ss);
-#endif
-
+  getNtpTime();
 #endif  
 
-  // -------------------------------------------------------------------------
-  //                                 End NTP
-  // -------------------------------------------------------------------------
+  ///////////////////////////////////////////////////////////////////////////////
+  //                                Main loop
+  ///////////////////////////////////////////////////////////////////////////////
+
+  // Timing holders (ms for last turn over)
+  time_t time_seconds = getMilliSeconds();
+  time_t time_minute = getMilliSeconds();
+  time_t time_hour = getMilliSeconds();
 
   while (1) {
 
@@ -379,33 +370,44 @@ main()
         // Parse VSCP command
         vscp_link_parser(&ctx[i], cmd);
 
-        // Feed VSCP machine
-
-
-        // We have a command to handle
-        // if (0 == strncmp(ctx[i].buf, "quit\r\n", 6)) {
-
-        //   // Confirm quit
-        //   writeSocket(ctx[i].sn, "+OK\r\n", 5);
-
-        //   // Disconnect from client
-        //   disconnect(ctx[i].sn);
-        // }
-        // else {
-        //   vscp_link_parser(&ctx, ctx[i].buf);
-        // }
-
-        // memset(ctx[i].buf, 0, ETHERNET_BUF_MAX_SIZE);
       }
 
       // Do protocol work here
-      vscp2_do_periodic_work(NULL);
+      vscp2_do_work(NULL);
 
       // Handle rcvloop etc
       vscp_link_idle_worker(&ctx[i]);
     }
 
     gpio_put(LED_PIN, 1);
+
+    // One second work
+    if ((getMilliSeconds()-time_seconds)  > 1000) {
+
+      datetime_t t;
+      char datetime_buf[256];
+      char *p = &datetime_buf[0];
+
+      rtc_get_datetime(&t);
+      datetime_to_str(p, sizeof(datetime_buf), &t);
+      printf("\r%s      ", p);
+      time_seconds = getMilliSeconds();
+    }
+
+    // One minute work
+    if ((getMilliSeconds() - time_minute) > 60000) {
+      printf("One minute\n");
+      time_minute = getMilliSeconds();
+
+      vscp2_send_heartbeat();
+      vscp2_send_caps();
+    }
+
+    // One hour work
+    if ((getMilliSeconds() - time_hour) > 3600000) {
+      printf("One hour\n");
+      time_hour = getMilliSeconds();
+    }
 
     // gpio_put(LED_PIN, 0);
     // sleep_ms(250);
@@ -417,10 +419,10 @@ main()
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// getMilliseconds
+// getMilliSeconds
 //
 
-time_t getMilliseconds(void)
+time_t getMilliSeconds(void)
 {
   return milliseconds;
 }
@@ -659,33 +661,88 @@ init_persistent_storage(void)
   eeprom_write(&eeprom, REG_ADC2_CTRL, 0);            // No setting for ADC2.
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// getNtpTime
+//
 
+#ifdef ENABLE_NTP
 
-
-
-
-
-
-
-
-/* References for this implementation:
- * raspberry-pi-pico-c-sdk.pdf, Section '4.1.1. hardware_adc'
- * pico-examples/adc/adc_console/adc_console.c */
-float read_onboard_temperature(const char unit) 
+void
+getNtpTime(void)
 {
-    
-    /* 12-bit conversion, assume max value == ADC_VREF == 3.3 V */
-    const float conversionFactor = 3.3f / (1 << 12);
+  int rv;
+  uint32_t start_ms = 0;
+  datetime time;
 
-    float adc = (float)adc_read() * conversionFactor;
-    float tempC = 27.0f - (adc - 0.706f) / 0.001721f;
 
-    if (unit == 'C') {
-        return tempC;
-    } else if (unit == 'F') {
-        return tempC * 9 / 5 + 32;
+  start_ms = getMilliSeconds();
+
+  // Get time
+  do {
+    rv = SNTP_run(&time);
+
+    if (rv == 1) {
+      break;
     }
+  } while ((getMilliSeconds() - start_ms) < RECV_TIMEOUT);
 
-    return -1.0f;
+  if (rv != 1) {
+#ifdef _DEMO_DEBUG_    
+    printf(" SNTP failed : %d\n", rv);
+#endif    
+    // Nill yo get defaults on receiving side
+    memset(&time, 0, sizeof(time));
+  }
+
+  datetime_t t;
+  t.year = time.yy;
+  t.month = time.mo;
+  t.day = time.dd;
+  t.hour = time.hh;
+  t.min = time.mm;
+  t.sec = time.ss;
+  //t.dotw = (time.dd + 4) % 7;
+  //t.dotw = time.dotw;
+
+  long day = EPOCH / 86400;
+  t.dotw = (day+5) % 7;
+
+  rtc_init();
+  rtc_set_datetime(&t);
+
+#ifdef _DEMO_DEBUG_
+  printf("* * * NTP: %d-%02d-%02d, %02d:%02d:%02d\n", time.yy, time.mo, time.dd, time.hh, time.mm, time.ss);
+#endif 
 }
 
+#endif // ENABLE_NTP
+
+/*
+ * References for this implementation:
+ * raspberry-pi-pico-c-sdk.pdf, Section '4.1.1. hardware_adc'
+ * pico-examples/adc/adc_console/adc_console.c
+ */
+float
+read_onboard_temperature(void)
+{
+  adc_select_input(4);  // Select ADC input 4 for temperature sensor
+
+  float adc   = (float)adc_read() * conversionFactor;
+  float temp = 27.0f - (adc - 0.706f) / 0.001721f;
+
+  return temp;
+}
+
+/*!
+  * @brief Read ADC value
+  * @param[in] channel ADC channel to read (0,1,2)
+  * @return ADC voltage.
+  */
+
+float 
+read_adc(uint8_t channel)
+{
+  adc_select_input(channel&0x03);  // Select ADC input
+  float adc   = (float)adc_read() * conversionFactor;
+  return adc;
+}

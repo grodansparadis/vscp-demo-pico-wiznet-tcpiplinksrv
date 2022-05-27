@@ -85,6 +85,9 @@ target_link_libraries(demo
                         hardware_spi
                         hardware_dma
                         hardware_adc
+                        hardware_flash
+                        hardware_gpio
+                        hardware_rtc
                         ETHERNET_FILES
                         IOLIBRARY_FILES
                         LOOPBACK_FILES
