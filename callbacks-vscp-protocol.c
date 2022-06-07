@@ -71,14 +71,19 @@
 
 // Defines from demo.c
 
+extern wiz_NetInfo net_info;
 extern uint8_t device_guid[16];
 extern vscp_fifo_t fifoEventsIn;
 extern struct _ctx ctx[MAX_CONNECTIONS];
 extern struct _eeprom_ eeprom;
 
+
+
 // ****************************************************************************
 //                        VSCP protocol callbacks
 // ****************************************************************************
+
+
 
 /*!
   @fn vscp2_callback_get_ms
@@ -103,11 +108,43 @@ int vscp2_callback_get_ms(const void* pdata, uint32_t *ptime)
  * @param pdata Pointer to user data.
  * @return 0 on success.
  */
+
 const uint8_t* 
 vscp2_callback_get_guid(const void* pdata)
 {
   return device_guid;
 }
+
+#ifdef THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS
+
+int
+vscp2_callback_write_manufacturer_id(const void* pdata, uint8_t pos, uint8_t val)
+{
+  if (pos < 4) {
+    eeprom_write(&eeprom, STDREG_MANUFACTURER_ID0 + pos, val);
+  }
+  else if (pos < 8) {
+    eeprom_write(&eeprom, STDREG_MANUFACTURER_SUBID0 + pos - 4, val);
+  }
+
+  // Commit changes to 'eeprom'
+  eeprom_commit(&eeprom);
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp2_callback_write_guid(const void *pdata, uint8_t pos, uint8_t val)
+{
+  eeprom_write(&eeprom, STDREG_GUID0 + pos, val);
+  
+  // Commit changes to 'eeprom'
+  eeprom_commit(&eeprom);
+
+  return VSCP_ERROR_SUCCESS;
+}
+
+#endif
 
 /**
  * @fn vscp2_callback_read_user_reg
@@ -377,14 +414,28 @@ int
 vscp2_callback_send_event(const void* pdata, vscpEvent* pev)
 {
   for (int i = 0; i < MAX_CONNECTIONS; i++) {
-    if (vscp_fifo_write(&ctx[i].fifoEventsOut, pev)) {
-      printf("Written to fifo\n");
-    }
-    else {
-      printf("Failed to write to fifo\n");
-      vscp_fwhlp_deleteEvent(&pev);
+
+    // Only if user is validated
+    if (ctx[i].bValidated) {  
+      vscpEvent *pnew = vscp_fwhlp_mkEventCopy(pev);
+      if (NULL == pnew) {
+        return VSCP_ERROR_MEMORY;
+      }
+      else {
+        pnew->obid = 0xffffffff; // The device
+        if (vscp_fifo_write(&ctx[i].fifoEventsOut, pnew)) {
+          printf("Written to fifo\n");
+        }
+        else {
+          printf("Failed to write to fifo\n");
+          vscp_fwhlp_deleteEvent(&pnew);      
+        }
+      }
     }
   }
+
+  // Remove original event
+  vscp_fwhlp_deleteEvent(&pev);
   
   return VSCP_ERROR_SUCCESS;
 }
@@ -414,13 +465,57 @@ vscp2_callback_restore_defaults(const void *pdata)
 int
 vscp2_callback_write_user_id(const void *pdata, uint8_t pos, uint8_t val)
 {
-  
+  eeprom_write(&eeprom, STDREG_USER_ID0 + pos, val);
 
+  // Commit changes to 'eeprom'
+  eeprom_commit(&eeprom);
+  
   return VSCP_ERROR_SUCCESS;
 }
 
+/**
+ * @brief Return ipv6 or ipv4 address
+ * 
+ * Return the ipv6 or ipv4 address of the interface. If the
+ * interface is not tcp/ip based just return a positive
+ * response or a valid address for the underlying transport protocol.
+ * 
+ * The address is always sixteen bytes long.
+ * 
+ * @param pdata Pointer to context. 
+ * @param pipaddr Pointer to 16 byte address space for (ipv6 or ipv4) address
+ *                return value. 
+ * @return VSCP_ERROR_SUCCESS on success, error code on failure 
+ */
 
+int
+vscp2_callback_get_ip_addr(const void *pUserData, uint8_t *pipaddr)
+{
+  if (NULL == pipaddr) {
+    return VSCP_ERROR_PARAMETER;
+  }
+  else {
+    memcpy(pipaddr, net_info.ip, 4);
+  }
+  
+  return VSCP_ERROR_SUCCESS;
+}
 
+/**
+ * @brief High end server response
+ * 
+ * Event received after a high end server request. This
+ * request can have been sent from this device or some 
+ * other device.
+ * 
+ * @param pdata Pointer to context. 
+ * @return VSCP_ERROR_SUCCESS on success, error code on failure 
+ */
 
-
-
+#ifdef THIS_FIRMWARE_VSCP_DISCOVER_SERVER
+int
+vscp2_callback_high_end_server_response(const void *pUserData)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+#endif

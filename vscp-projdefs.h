@@ -23,7 +23,7 @@
   case one should check the max data size for events that are of
   interest and set the max size accordingly 
 */
-#define VSCP_LINK_MAX_BUF         (2670)
+#define VSCP_LINK_MAX_BUF         (2680)
 
 /*!
   Define to show custom help. The callback is called so you can respond 
@@ -60,6 +60,11 @@
   ----------------------------------------------------------------------------
   Defines for firmware level II
 */
+
+/*!
+  Name of device for level II capabilities announcement event.
+*/
+#define THIS_FIRMWARE_DEVICE_NAME "VSCP pico/wiznet demo device"
 
 
 /**
@@ -151,7 +156,7 @@
  *
  * Writing manufacturer data and GUID
  */
-#define THIS_FIRMWARE_ENABLE_WRITE_PROTECTED_LOCATIONS
+#define THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS
 
 /**
  * @brief Send server probe
@@ -162,7 +167,7 @@
 /**
  * GUID for this node (no spaces)
  */
-#define THIS_FIRMWARE_GUID                    {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xfe,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}
+#define THIS_FIRMWARE_GUID                    {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xfe,0x00,0x08,0xdc,0x12,0x34,0x56,0x00,0x01}
 
 /**
  * URL to MDF file

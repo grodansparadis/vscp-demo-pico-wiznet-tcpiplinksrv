@@ -85,7 +85,7 @@
 */
 struct _ctx {
   uint8_t sn;                                   // Socket
-  uint16_t size;                                // Number of characters in buffer
+  size_t size;                                  // Number of characters in buffer
   uint8_t buf[ETHERNET_BUF_MAX_SIZE];           // Command Buffer
   uint8_t user[VSCP_LINK_MAX_USER_NAME_LENGTH]; // Username storage
   vscp_fifo_t fifoEventsOut;                    // VSCP event send fifo
@@ -226,12 +226,21 @@ static const uint32_t _GOTOSLEEP = 0xC0DED02E;
   written during manufacturing
 */  
 
-
 #define STDREG_USER_ID0               0x000000E1    // (RO) User ID 0 register.
 #define STDREG_USER_ID1               0x000000E2    // (RO) User ID 1 register.
 #define STDREG_USER_ID2               0x000000E3    // (RO) User ID 2 register.
 #define STDREG_USER_ID3               0x000000E4    // (RO) User ID 3 register.
 #define STDREG_USER_ID4               0x000000E5    // (RO) User ID 4 register.
+
+
+/*
+  Manufacturer and GUID is stored in eeprom on a device that should
+  be possible to be configured with unique data in these locations before 
+  it is shipped to a customer.
+*/
+
+
+#ifdef THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS 
 
 #define STDREG_MANUFACTURER_ID0       0x000000E6    // (RO) Manufacturer ID 0 register.
 #define STDREG_MANUFACTURER_ID1       0x000000E7    // (RO) Manufacturer ID 1 register.
@@ -243,7 +252,6 @@ static const uint32_t _GOTOSLEEP = 0xC0DED02E;
 #define STDREG_MANUFACTURER_SUBID2    0x000000EC    // (RO) Manufacturer SUBID 2 register.
 #define STDREG_MANUFACTURER_SUBID3    0x000000ED    // (RO) Manufacturer SUBID 3 register.
 
-#ifndef GUID_IS_MAC_ADDRESS
 #define STDREG_GUID0                  0x000000EE    // (RO) GUID 0 register.
 #define STDREG_GUID1                  0x000000EF    // (RO) GUID 1 register.
 #define STDREG_GUID2                  0x000000F0    // (RO) GUID 2 register.
@@ -260,6 +268,7 @@ static const uint32_t _GOTOSLEEP = 0xC0DED02E;
 #define STDREG_GUID13                 0x000000FB    // (RO) GUID 13 register.
 #define STDREG_GUID14                 0x000000FC    // (RO) GUID 14 register.
 #define STDREG_GUID15                 0x000000FD    // (RO) GUID 15 register.
+
 #endif
 
 #define REG_DM_START            0xFFFE0000    // Start for decision matrix.

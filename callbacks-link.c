@@ -95,7 +95,7 @@ vscp_link_callback_welcome(const void* pdata)
     return VSCP_ERROR_INVALID_POINTER;
   }
 
-  struct _ctx* pctx = (struct _ctx*)pdata;
+  struct _ctx* pctx = (struct _ctx*)pdata;  
 
   writeSocket(pctx->sn, DEMO_WELCOME_MSG, strlen(DEMO_WELCOME_MSG));
   return VSCP_ERROR_SUCCESS;
@@ -249,6 +249,12 @@ vscp_link_callback_check_password(const void* pdata, const char* arg)
   if (0 == strcmp(pctx->user, "admin") && 0 == strcmp(p, "secret")) {
     pctx->bValidated = true;
     pctx->privLevel = 15;
+
+    // Send out early to identify ourself
+    // no need to send earlier as bValidate must be true
+    // for events to get delivered
+    vscp2_send_heartbeat();
+    vscp2_send_caps();
   }
   else {
     pctx->user[0]    = '\0';
@@ -379,20 +385,41 @@ vscp_link_callback_send(const void* pdata, vscpEvent* pev)
 
   // Write event to receive fifo
   pev->obid = pctx->sn;
-  if (!vscp_fifo_write(&fifoEventsIn, pev)) {
-    pctx->statistics.cntOverruns++;
-    return VSCP_ERROR_TRM_FULL;
+  vscpEvent *pnew = vscp_fwhlp_mkEventCopy(pev);
+  if (NULL == pnew) {
+    return VSCP_ERROR_MEMORY;
+  }
+  else {
+    if (!vscp_fifo_write(&fifoEventsIn, pnew)) {
+      vscp_fwhlp_deleteEvent(&pnew);
+      vscp_fwhlp_deleteEvent(&pev);
+      pctx->statistics.cntOverruns++;
+      return VSCP_ERROR_TRM_FULL;
+    }
   }
 
   // Write to send buffer of other interfaces
   for (int i = 0; i < MAX_CONNECTIONS; i++) {
     if (pctx->sn != i) {
-      if (!vscp_fifo_write(&ctx[i].fifoEventsOut, pev)) {
-        ctx[i].statistics.cntOverruns++;
-        return VSCP_ERROR_TRM_FULL;
-      }  
+      vscpEvent *pnew = vscp_fwhlp_mkEventCopy(pev);
+      if (NULL == pnew) {
+        vscp_fwhlp_deleteEvent(&pnew);
+        vscp_fwhlp_deleteEvent(&pev);
+        return VSCP_ERROR_MEMORY;
+      }
+      else {
+        if (!vscp_fifo_write(&ctx[i].fifoEventsOut, pnew)) {
+          vscp_fwhlp_deleteEvent(&pnew);
+          vscp_fwhlp_deleteEvent(&pev);
+          ctx[i].statistics.cntOverruns++;
+          return VSCP_ERROR_TRM_FULL;
+        }  
+      }
     }  
   }
+
+  // Event is not needed anymore
+  vscp_fwhlp_deleteEvent(&pev);
 
   // We own the event from now on and must
   // delete it and it's data when we are done
@@ -640,7 +667,7 @@ vscp_link_callback_info(const void* pdata, VSCPStatus *pstatus)
 //
 
 int
-vscp_link_callback_rcvloop(const void* pdata, vscpEvent *pev)
+vscp_link_callback_rcvloop(const void* pdata, vscpEvent **pev)
 {
   // Check pointer
   if (NULL == pdata) {
@@ -655,13 +682,13 @@ vscp_link_callback_rcvloop(const void* pdata, vscpEvent *pev)
     return VSCP_ERROR_TIMEOUT;
   }
 
-  if (!vscp_fifo_read(&pctx->fifoEventsOut, &pev)) {
+  if (!vscp_fifo_read(&pctx->fifoEventsOut, pev)) {
     return VSCP_ERROR_RCV_EMPTY;
   }
 
   // Update receive statistics
   pctx->statistics.cntReceiveFrames++;
-  pctx->statistics.cntReceiveData += pev->sizeData;
+  pctx->statistics.cntReceiveData += (*pev)->sizeData;
 
   return VSCP_ERROR_SUCCESS;
 }

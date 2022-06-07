@@ -90,7 +90,7 @@ mutex_t _idleMutex;               // Mutex for idle state
 
   Note that the max address is used to construct the device GUID
 */
-static wiz_NetInfo net_info = {
+wiz_NetInfo net_info = {
   .mac  = { 0x00, 0x08, 0xDC, 0x12, 0x34, 0x56 }, // MAC address (Also part of GUID)
   .ip   = { 192, 168, 1, 189 },                   // IP address
   .sn   = { 255, 255, 255, 0 },                   // Subnet Mask
@@ -123,9 +123,17 @@ static const float conversionFactor = 3.3f / (1 << 12);
 /**
   GUID for device
   This is the GUID that is used to identify the device.
-  Use Ethernet MAC address as base. Can also be set explicitly.
+  Can use Ethernet MAC address as base.
+
+  If set to writeable the GUID must be stored in eeprom or other
+  persistent storage.
 */
+
+#ifdef THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS
+uint8_t device_guid[16];
+#else
 uint8_t device_guid[16] = THIS_FIRMWARE_GUID;
+#endif
 
 /**
   Received event are written to this fifo 
@@ -219,10 +227,10 @@ main()
   // Initialize 
   int rv = 0;
 
-  bi_decl(bi_program_description("This is a demo binary for the VSCP tcp/ip link protocol on pico with wiznet w5100s."));
+  bi_decl(bi_program_description("A demo binary for the VSCP tcp/ip link protocol on pico with wiznet w5100s."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));
 
-  //set_clock_khz();
+  set_clock_khz();
   stdio_init_all();
 
   if (watchdog_caused_reboot()) {
@@ -253,6 +261,15 @@ main()
     printf("Persistent storage already initialized\n");
   }
 
+/*
+  GUID is set from EEPROM if changeable
+*/
+#ifdef THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS
+  for (int i=0; i<16; i++) {
+    device_guid[i] = eeprom_read(&eeprom, STDREG_GUID0 + i);
+  }
+#endif
+
   mutex_init(&_idleMutex);
 
   /** 
@@ -260,7 +277,7 @@ main()
    * the chip will reboot second arg is pause on debug which means the watchdog
    * will pause when stepping through code
    */ 
-  //watchdog_enable(5000, 1);
+  //watchdog_enable(8000, 1);
 
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -280,6 +297,7 @@ main()
     setContextDefaults(&ctx[i]);
   }
 
+  // Initialize the input fifo
   vscp_fifo_init(&fifoEventsIn, RECEIVE_FIFO_SIZE);    
 
 #ifdef _DEMO_DEBUG_
@@ -337,6 +355,7 @@ main()
 
     // VSCP TCP link server handler 
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
+      
       if ((rv = vscp_handleSocketEvents(&ctx[i], VSCP_DEFAULT_TCP_PORT)) < 0) {
         printf(" Link error : %d\n", rv);
         while (1) {
@@ -344,36 +363,20 @@ main()
         }
       }
 
-      // If buf contains a carriage return, we have a command to handle 
-      char* p = NULL;
-      if (NULL != (p = strstr(ctx[i].buf, "\r\n"))) {
+      // Parse VSCP command
+      vscp_link_parser(&ctx[i], ctx[i].buf, &ctx[i].size);
 
-        char cmd[80];
-        memset(cmd, 0, sizeof(cmd));
+      // Get event from input fifo
+      vscpEvent *pev = NULL;
+      vscp_fifo_read(&fifoEventsIn, &pev);
 
-        *p             = '\0';
-        size_t cmdSize = strlen(ctx[i].buf);
-        strncpy(cmd, ctx[i].buf, sizeof(cmd) - 1);
-        printf("Command: %s\n", cmd);
-
-        p += 2; // Point beyond the \r\n
-        if (*p) {
-          strncpy(ctx[i].buf, p, ctx[i].size - cmdSize - 2);
-          ctx[i].size -= (cmdSize + 2);
-        }
-        else {
-          ctx[i].buf[0] = '\0';
-          ctx[i].size   = 0;
-        }
-        printf("Buffer after: %s\n", ctx[i].buf);
-
-        // Parse VSCP command
-        vscp_link_parser(&ctx[i], cmd);
-
-      }
+      // pev is NULL if no event is available here
+      // The worker is still called.
+      // if pev != NULL the worker is responsible for 
+      // freeing the event
 
       // Do protocol work here
-      vscp2_do_work(NULL);
+      vscp2_do_work(pev);
 
       // Handle rcvloop etc
       vscp_link_idle_worker(&ctx[i]);
@@ -442,7 +445,7 @@ time_t getMilliSeconds(void)
 void
 setContextDefaults(struct _ctx* pctx)
 {
-  pctx->bValidated        = false;
+  pctx->bValidated        = 0;
   pctx->privLevel         = 0;
   pctx->bRcvLoop          = 0;
   pctx->size              = 0;
@@ -659,6 +662,25 @@ init_persistent_storage(void)
   eeprom_write(&eeprom, REG_ADC0_CTRL, 0);            // No setting for ADC0.
   eeprom_write(&eeprom, REG_ADC1_CTRL, 0);            // No setting for ADC1.
   eeprom_write(&eeprom, REG_ADC2_CTRL, 0);            // No setting for ADC2.
+
+#ifdef THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS
+
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_ID0, 0);  // Manufacturer id 0.
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_ID1, 1);  // Manufacturer id 1.
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_ID2, 2);  // Manufacturer id 2.
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_ID3, 3);  // Manufacturer id 3.
+
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_SUBID0, 0);  // Manufacturer sub id = 0.
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_SUBID1, 0);  // Manufacturer sub id = 0.
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_SUBID2, 0);  // Manufacturer sub id = 0.
+  eeprom_write(&eeprom, STDREG_MANUFACTURER_SUBID3, 0);  // Manufacturer sub id = 0.
+
+  uint8_t guid[16] = THIS_FIRMWARE_GUID;
+  for (uint8_t i = 0; i < 16; i++) {
+    eeprom_write(&eeprom, STDREG_GUID0 + i, guid[i]);
+  }
+  
+#endif  
 }
 
 ///////////////////////////////////////////////////////////////////////////////
