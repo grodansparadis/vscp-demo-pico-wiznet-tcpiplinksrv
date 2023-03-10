@@ -92,7 +92,7 @@ extern struct _eeprom_ eeprom;
   @param ptime Pointer to unsigned integer that will get the time in milliseconds.
   @return True if handled.
 */
-int vscp2_callback_get_ms(const void* pdata, uint32_t *ptime)
+int vscp2_protocol_callback_get_ms(const void* pdata, uint32_t *ptime)
 {
   if ((NULL == pdata) || (NULL == ptime)) {
     return VSCP_ERROR_INVALID_POINTER;
@@ -110,7 +110,7 @@ int vscp2_callback_get_ms(const void* pdata, uint32_t *ptime)
  */
 
 const uint8_t* 
-vscp2_callback_get_guid(const void* pdata)
+vscp2_protocol_callback_get_guid(const void* pdata)
 {
   return device_guid;
 }
@@ -118,7 +118,7 @@ vscp2_callback_get_guid(const void* pdata)
 #ifdef THIS_FIRMWARE_ENABLE_WRITE_2PROTECTED_LOCATIONS
 
 int
-vscp2_callback_write_manufacturer_id(const void* pdata, uint8_t pos, uint8_t val)
+vscp2_protocol_callback_write_manufacturer_id(const void* pdata, uint8_t pos, uint8_t val)
 {
   if (pos < 4) {
     eeprom_write(&eeprom, STDREG_MANUFACTURER_ID0 + pos, val);
@@ -134,7 +134,7 @@ vscp2_callback_write_manufacturer_id(const void* pdata, uint8_t pos, uint8_t val
 }
 
 int
-vscp2_callback_write_guid(const void *pdata, uint8_t pos, uint8_t val)
+vscp2_protocol_callback_write_guid(const void *pdata, uint8_t pos, uint8_t val)
 {
   eeprom_write(&eeprom, STDREG_GUID0 + pos, val);
   
@@ -157,7 +157,7 @@ vscp2_callback_write_guid(const void *pdata, uint8_t pos, uint8_t val)
  */
 
 int
-vscp2_callback_read_user_reg(const void* pdata, uint32_t reg, uint8_t* pval)
+vscp2_protocol_callback_read_user_reg(const void* pdata, uint32_t reg, uint8_t* pval)
 {
   // Check pointers (pdata allowed to be NULL)
   if (NULL == pval) {
@@ -256,7 +256,7 @@ vscp2_callback_read_user_reg(const void* pdata, uint32_t reg, uint8_t* pval)
 }
 
 /**
- * @fn vscp2_callback_write_user_reg
+ * @fn vscp2_protocol_callback_write_user_reg
  * @brief Write application register
  * 
  * @param pdata Pointer to context. 
@@ -266,7 +266,7 @@ vscp2_callback_read_user_reg(const void* pdata, uint32_t reg, uint8_t* pval)
  */
 
 int
-vscp2_callback_write_user_reg(const void* pdata, uint32_t reg, uint8_t val)
+vscp2_protocol_callback_write_user_reg(const void* pdata, uint32_t reg, uint8_t val)
 {
   if ( REG_DEVICE_ZONE == reg) {
     eeprom_write(&eeprom, REG_DEVICE_ZONE, val);
@@ -337,7 +337,7 @@ vscp2_callback_write_user_reg(const void* pdata, uint32_t reg, uint8_t val)
  */
 
 int
-vscp2_callback_enter_bootloader(const void* pdata)
+vscp2_protocol_callback_enter_bootloader(const void* pdata)
 {
   return VSCP_ERROR_SUCCESS;
 }
@@ -349,7 +349,7 @@ vscp2_callback_enter_bootloader(const void* pdata)
  */
 
 int
-vscp2_callback_report_dmatrix(const void* pdata)
+vscp2_protocol_callback_report_dmatrix(const void* pdata)
 {
   return VSCP_ERROR_SUCCESS;
 }
@@ -361,7 +361,7 @@ vscp2_callback_report_dmatrix(const void* pdata)
  */
 
 int
-vscp2_callback_report_mdf(const void* pdata)
+vscp2_protocol_callback_report_mdf(const void* pdata)
 {
   return VSCP_ERROR_SUCCESS;
 }
@@ -373,7 +373,7 @@ vscp2_callback_report_mdf(const void* pdata)
  */
 
 int
-vscp2_callback_report_events_of_interest(const void* pdata)
+vscp2_protocol_callback_report_events_of_interest(const void* pdata)
 {
   return VSCP_ERROR_SUCCESS;
 }
@@ -385,7 +385,7 @@ vscp2_callback_report_events_of_interest(const void* pdata)
  */
 
 uint32_t
-vscp2_callback_get_timestamp(const void* pdata)
+vscp2_protocol_callback_get_timestamp(const void* pdata)
 {
   return time_us_32();
 }
@@ -398,7 +398,7 @@ vscp2_callback_get_timestamp(const void* pdata)
  */
 
 int
-vscp2_callback_get_time(const void* pdata, const vscpEvent *pev)
+vscp2_protocol_callback_get_time(const void* pdata, const vscpEvent *pev)
 {
   return VSCP_ERROR_SUCCESS;
 }
@@ -411,7 +411,7 @@ vscp2_callback_get_time(const void* pdata, const vscpEvent *pev)
  */
 
 int
-vscp2_callback_send_event(const void* pdata, vscpEvent* pev)
+vscp2_protocol_callback_send_event(const void* pdata, vscpEvent* pev)
 {
   for (int i = 0; i < MAX_CONNECTIONS; i++) {
 
@@ -448,7 +448,7 @@ vscp2_callback_send_event(const void* pdata, vscpEvent* pev)
  */
 
 int
-vscp2_callback_restore_defaults(const void *pdata)
+vscp2_protocol_callback_restore_defaults(const void *pdata)
 {
   return VSCP_ERROR_SUCCESS;
 }
@@ -463,7 +463,7 @@ vscp2_callback_restore_defaults(const void *pdata)
  */
 
 int
-vscp2_callback_write_user_id(const void *pdata, uint8_t pos, uint8_t val)
+vscp2_protocol_callback_write_user_id(const void *pdata, uint8_t pos, uint8_t val)
 {
   eeprom_write(&eeprom, STDREG_USER_ID0 + pos, val);
 
@@ -489,7 +489,7 @@ vscp2_callback_write_user_id(const void *pdata, uint8_t pos, uint8_t val)
  */
 
 int
-vscp2_callback_get_ip_addr(const void *pUserData, uint8_t *pipaddr)
+vscp2_protocol_callback_get_ip_addr(const void *pUserData, uint8_t *pipaddr)
 {
   if (NULL == pipaddr) {
     return VSCP_ERROR_PARAMETER;
@@ -514,7 +514,7 @@ vscp2_callback_get_ip_addr(const void *pUserData, uint8_t *pipaddr)
 
 #ifdef THIS_FIRMWARE_VSCP_DISCOVER_SERVER
 int
-vscp2_callback_high_end_server_response(const void *pUserData)
+vscp2_protocol_callback_high_end_server_response(const void *pUserData)
 {
   return VSCP_ERROR_SUCCESS;
 }

@@ -66,8 +66,6 @@ add_executable(demo
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.h
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.c
                 ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.h
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.c
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.h
 )
 
 # Add libraries in subdirectories
