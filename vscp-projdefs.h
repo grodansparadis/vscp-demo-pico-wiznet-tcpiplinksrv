@@ -51,7 +51,8 @@
  * Only 'quit' and 'quitloop' will work if
  * set to zero.
  */
-#define VSCP_LINK_ENABLE_RCVLOOP_CMD  (1)
+//#define VSCP_LINK_ENABLE_RCVLOOP_CMD  (1)
+#define THIS_FIRMWARE_TCPIP_LINK_ENABLE_RCVLOOP_CMD  (1)
 
 
 /**
@@ -139,7 +140,8 @@
 /**
  * Buffer size
  */
-#define THIS_FIRMWARE_BUFFER_SIZE               VSCP_MAX (vscp.h)
+//#define THIS_FIRMWARE_BUFFER_SIZE               512
+#define THIS_FIRMWARE_TCPIP_LINK_MAX_BUFFER     512
 
 /**
  * Enable logging

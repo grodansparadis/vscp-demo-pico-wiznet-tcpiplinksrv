@@ -32,6 +32,9 @@
  * ******************************************************************************
  */
 
+#include <stdio.h>
+#include <time.h>
+
 #include <vscp.h>
 #include <vscp-fifo.h>
 #include <vscp-firmware-helper.h>
@@ -74,7 +77,7 @@
 #define TRANSMIT_FIFO_SIZE 16
 
 #define DEMO_WELCOME_MSG "Welcome to the wiznet w5100s pico demo VSCP TCP link protocol node\r\n" \
-                         "Copyright (C) 2000-2022 Grodans Paradis AB\r\n"                  \
+                         "Copyright (C) 2000-2025 Grodans Paradis AB\r\n"                  \
                          "https://www.grodansparadis.com\r\n"                              \
                          "+OK\r\n"
 

@@ -52,7 +52,7 @@
 #include <string.h>
 
 #include "port_common.h"
-//#include <w5x00_spi.h>
+// #include <w5x00_spi.h>
 #include "wizchip_conf.h"
 
 #include "sntp.h"
@@ -246,8 +246,8 @@ vscp_link_callback_check_password(const void* pdata, const char* arg)
     // Send out early to identify ourself
     // no need to send earlier as bValidate must be true
     // for events to get delivered
-    vscp2_send_heartbeat();
-    vscp2_send_caps();
+    vscp_frmw2_send_heartbeat();
+    vscp_frmw2_send_caps();
   }
   else {
     pctx->user[0]    = '\0';
@@ -818,5 +818,82 @@ vscp_link_callback_sec(const void* pdata)
     return VSCP_ERROR_INVALID_POINTER;
   }
 
+  return VSCP_ERROR_SUCCESS;
+}
+
+// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+
+int
+vscp_frmw2_callback_set_event_time(void* const puserdata, vscpEventEx* const pex)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp_frmw2_callback_send_event_ex(void* const puserdata, vscpEventEx* pex)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+uint32_t
+vscp_frmw2_callback_get_milliseconds(void* const puserdata)
+{
+  return 0;
+}
+
+int
+vscp_frmw2_callback_dm_action(void* const puserdata,
+                              const vscpEventEx* const pex,
+                              uint8_t action,
+                              const uint8_t* const pparam)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp_frmw2_callback_restore_defaults(void* const puserdata)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+void
+vscp_frmw2_callback_feed_watchdog(void* const puserdata)
+{
+}
+
+void
+vscp_frmw2_callback_enter_bootloader(void* const puserdata)
+{
+  ;
+}
+
+// int
+// vscp_frmw2_vscp2_register_write(uint32_t startreg, uint16_t cnt, const uint8_t* const pdata)
+// {
+//   return VSCP_ERROR_SUCCESS;
+// }
+
+
+int
+vscp_frmw2_callback_stdreg_change(void* const puserdata, uint32_t stdreg)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+int
+vscp_frmw2_callback_write_reg(void* const puserdata, uint16_t page, uint32_t reg, uint8_t val)
+{
+  return VSCP_ERROR_SUCCESS;
+}
+
+uint64_t
+vscp_frmw2_callback_get_timestamp(void* const puserdata)
+{
+  return 0;
+}
+
+int
+vscp_frmw2_callback_read_reg(void* const puserdata, uint16_t page, uint32_t reg, uint8_t* pval)
+{
   return VSCP_ERROR_SUCCESS;
 }

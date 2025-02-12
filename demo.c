@@ -376,7 +376,7 @@ main()
       // freeing the event
 
       // Do protocol work here
-      vscp2_do_work(pev);
+      vscp_frmw2_work(pev);
 
       // Handle rcvloop etc
       vscp_link_idle_worker(&ctx[i]);
@@ -402,8 +402,8 @@ main()
       printf("One minute\n");
       time_minute = getMilliSeconds();
 
-      vscp2_send_heartbeat();
-      vscp2_send_caps();
+      vscp_frmw2_send_heartbeat();
+      vscp_frmw2_send_caps();
     }
 
     // One hour work

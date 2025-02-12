@@ -1,9 +1,27 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+
+set(BOARD_NAME W5500_EVB_PICO)
+set(sdkVersion 2.1.0)
+set(toolchainVersion 13_3_Rel1)
+set(picotoolVersion 2.1.0)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
 cmake_minimum_required(VERSION 3.13)
 
-include(pico_sdk_import.cmake)
+#include(pico_sdk_import.cmake)
+# initialize the SDK directly
+include(./third_party/pico-sdk/pico_sdk_init.cmake)
 
-include(${CMAKE_SOURCE_DIR}/RP2040-HAT-C/pico_sdk_import.cmake)
-include(${CMAKE_SOURCE_DIR}/RP2040-HAT-C/rp2040_hat_c_sdk_version.cmake)
+include(${CMAKE_SOURCE_DIR}/third_party/WIZnet-PICO-C/pico_sdk_import.cmake)
+include(${CMAKE_SOURCE_DIR}/third_party/WIZnet-PICO-C/wiznet_pico_c_sdk_version.cmake)
 
 project(demo C CXX ASM)
 
@@ -30,17 +48,17 @@ message(STATUS WIZNET_CHIP = '${WIZNET_CHIP}')
 # the tests folder is included directly by a parent project, without including
 # the top level CMakeLists.txt.
 if(NOT DEFINED WIZNET_DIR)
-    set(WIZNET_DIR ${CMAKE_SOURCE_DIR}/RP2040-HAT-C/libraries/ioLibrary_Driver)
+    set(WIZNET_DIR ${CMAKE_SOURCE_DIR}/third_party/WIZnet-PICO-C/libraries/ioLibrary_Driver)
     message(STATUS "WIZNET_DIR = ${WIZNET_DIR}")
 endif()
 
 if(NOT DEFINED MBEDTLS_DIR)
-    set(MBEDTLS_DIR ${CMAKE_SOURCE_DIR}/RP2040-HAT-C/libraries/mbedtls)
+    set(MBEDTLS_DIR ${CMAKE_SOURCE_DIR}/third_party/WIZnet-PICO-C/libraries/mbedtls)
     message(STATUS "MBEDTLS_DIR = ${MBEDTLS_DIR}")
 endif()
 
 if(NOT DEFINED PORT_DIR)
-    set(PORT_DIR ${CMAKE_SOURCE_DIR}/RP2040-HAT-C/port)
+    set(PORT_DIR ${CMAKE_SOURCE_DIR}/third_party/WIZnet-PICO-C/port)
     message(STATUS "PORT_DIR = ${PORT_DIR}")
 endif()
 
@@ -58,18 +76,18 @@ add_executable(demo
                 pico-eeprom.c
                 callbacks-link.c
                 callbacks-vscp-protocol.c
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-fifo.h 
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-fifo.c
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-helper.h 
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-helper.c
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.c
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-link-protocol.h
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.c
-                ${CMAKE_SOURCE_DIR}/../../VSCP/vscp-firmware/common/vscp-firmware-level2.h
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-fifo.h 
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-fifo.c
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-firmware-helper.h 
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-firmware-helper.c
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-link-protocol.c
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-link-protocol.h
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-firmware-level2.c
+                ${CMAKE_SOURCE_DIR}/third_party/vscp-firmware/common/vscp-firmware-level2.h
 )
 
 # Add libraries in subdirectories
-add_subdirectory(${CMAKE_SOURCE_DIR}/RP2040-HAT-C/libraries)
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/WIZnet-PICO-C/libraries)
 add_subdirectory(${MBEDTLS_DIR})
 add_subdirectory(${PORT_DIR})
 
