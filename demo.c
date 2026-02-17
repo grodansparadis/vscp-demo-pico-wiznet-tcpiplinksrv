@@ -6,7 +6,7 @@
  *
  * The MIT License (MIT)
  *
- * Copyright (c) 2000-2022 Ake Hedman, Grodans Paradis AB <info@grodansparadis.com>
+ * Copyright (c) 2000-2026 Ake Hedman, Grodans Paradis AB <info@grodansparadis.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,8 +32,7 @@
  * ******************************************************************************
  */
 
-//#include "pico.h"
-
+#include <pico.h>
 #include <hardware/structs/timer.h>
 
 #include <hardware/gpio.h>
@@ -70,6 +69,7 @@
 #include "vscp-compiler.h"
 #include "vscp-projdefs.h"
 
+#include <vscp.h>
 #include "demo.h"
 
 
@@ -226,6 +226,8 @@ main()
 {
   // Initialize 
   int rv = 0;
+  vscpEvent *pev = NULL;
+  vscpEventEx *pex = NULL;
 
   bi_decl(bi_program_description("A demo binary for the VSCP tcp/ip link protocol on pico with wiznet w5100s."));
   bi_decl(bi_1pin_with_name(LED_PIN, "On-board LED"));
@@ -364,19 +366,24 @@ main()
       }
 
       // Parse VSCP command
-      vscp_link_parser(&ctx[i], ctx[i].buf, &ctx[i].size);
+      char *pnext;
+      vscp_link_parser(&ctx[i], ctx[i].buf, &pnext);
 
-      // Get event from input fifo
-      vscpEvent *pev = NULL;
+      // Get event from input fifo      
       vscp_fifo_read(&fifoEventsIn, &pev);
 
-      // pev is NULL if no event is available here
+      if (VSCP_ERROR_SUCCESS != vscp_fwhelp_convertEventToEventEx(pex, pev)) {
+        printf("Failed to convert event to ex\n");
+        continue;
+      }
+
+      // pex is NULL if no event is available here
       // The worker is still called.
       // if pev != NULL the worker is responsible for 
       // freeing the event
 
       // Do protocol work here
-      vscp_frmw2_work(pev);
+      vscp_frmw2_work(pex);
 
       // Handle rcvloop etc
       vscp_link_idle_worker(&ctx[i]);

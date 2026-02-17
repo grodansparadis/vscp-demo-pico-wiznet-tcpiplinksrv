@@ -44,6 +44,9 @@ endif()
 
 message(STATUS WIZNET_CHIP = '${WIZNET_CHIP}')
 
+# Set WIZchip Clock Speed
+add_definitions(-D_WIZCHIP_SPI_SCLK_SPEED=40) # SPEED MHz
+
 # Set the project root directory if it's not already defined, as may happen if
 # the tests folder is included directly by a parent project, without including
 # the top level CMakeLists.txt.
