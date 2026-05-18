@@ -190,6 +190,22 @@ vscp_link_callback_get_interface(const void* pdata, uint16_t index, struct vscp_
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// vscp_link_callback_close_interface
+//
+
+int
+vscp_link_callback_close_interface(const void* pdata, uint8_t *pguid)
+{
+  if ((NULL == pdata) || (NULL == pguid)) {
+    return VSCP_ERROR_INVALID_POINTER;
+  }
+
+  // This demo only exposes one internal interface and does not support
+  // runtime close operations.
+  return VSCP_ERROR_NOT_SUPPORTED;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // vscp_link_callback_check_user
 //
 

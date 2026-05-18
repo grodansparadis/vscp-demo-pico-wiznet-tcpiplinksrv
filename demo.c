@@ -57,7 +57,7 @@
 
 #include "port_common.h"
 #include "wizchip_conf.h"
-#include "w5x00_spi.h"
+#include "wizchip_spi.h"
 
 #include "socket.h"
 #include "wizchip_conf.h"
@@ -372,7 +372,7 @@ main()
       // Get event from input fifo      
       vscp_fifo_read(&fifoEventsIn, &pev);
 
-      if (VSCP_ERROR_SUCCESS != vscp_fwhelp_convertEventToEventEx(pex, pev)) {
+      if (VSCP_ERROR_SUCCESS != vscp_fwhlp_convertEventToEventEx(pex, pev)) {
         printf("Failed to convert event to ex\n");
         continue;
       }

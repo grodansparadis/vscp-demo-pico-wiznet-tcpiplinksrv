@@ -32,7 +32,7 @@ $ make
 
 Copy the generated demo.uf2 to the pico.
 
-git clone --recurse-submodules https://github.com/Wiznet/RP2040-HAT-C.git
+git clone --recurse-submodules https://github.com/WIZnet-ioNIC/WIZnet-PICO-C
 
 ## Notes on working with picoprobe on Ubuntu and Visual Studio Code
 
