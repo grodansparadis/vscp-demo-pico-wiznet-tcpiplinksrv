@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib \
+            python3
+
+      - name: Configure CMake
+        run: |
+          cmake -S firmware -B firmware/build \
+            -G Ninja \
+            -DPICO_BOARD=pico \
+            -DCMAKE_TOOLCHAIN_FILE=firmware/third-party/pico-sdk/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+
+      - name: Build
+        run: cmake --build firmware/build --parallel
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-firmware
+          path: |
+            firmware/build/demo.uf2
+            firmware/build/demo.elf
