@@ -66,11 +66,11 @@ if(NOT DEFINED PORT_DIR)
     message(STATUS "PORT_DIR = ${PORT_DIR}")
 endif()
 
-# Turn off mbedtls test mode 
-set(ENABLE_PROGRAMS OFF CACHE BOOL "Build mbedtls programs")
-set(ENABLE_TESTING OFF CACHE BOOL "Build mbedtls testing")
-add_definitions(-DMBEDTLS_CONFIG_FILE="${PORT_DIR}/mbedtls/inc/ssl_config.h")
-add_definitions(-DSET_TRUSTED_CERT_IN_SAMPLES)
+# Turn off mbedtls test mode
+# set(ENABLE_PROGRAMS OFF CACHE BOOL "Build mbedtls programs")
+# set(ENABLE_TESTING OFF CACHE BOOL "Build mbedtls testing")
+# add_definitions(-DMBEDTLS_CONFIG_FILE="${PORT_DIR}/mbedtls/inc/ssl_config.h")
+# add_definitions(-DSET_TRUSTED_CERT_IN_SAMPLES)
 
 # -----------------------------------------------------------------------------
 
@@ -92,7 +92,8 @@ add_executable(demo
 
 # Add libraries in subdirectories
 add_subdirectory(${CMAKE_SOURCE_DIR}/third-party/WIZnet-PICO-C/libraries libraries)
-add_subdirectory(${MBEDTLS_DIR} mbedtls)
+# mbedtls is not used by this project - skip to avoid build errors with mbedtls 4.x / TF-PSA-Crypto
+# add_subdirectory(${MBEDTLS_DIR} mbedtls)
 add_subdirectory(${PORT_DIR} port)
 
 include_directories( PUBLIC src
