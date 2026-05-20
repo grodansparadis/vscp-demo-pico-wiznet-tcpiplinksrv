@@ -1,3 +1,7 @@
 build
 .Doxyfile.swp
 a.out
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

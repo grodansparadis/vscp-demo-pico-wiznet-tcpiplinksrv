@@ -311,6 +311,7 @@ main()
   //multicore_launch_core1(core1_entry);
 
   printf("\n\n\n\n\n\n_________________________________________________\n");
+  printf(DEMO_WELCOME_MSG);
 
   float temp = read_onboard_temperature();
   printf("temp = %.02f\n", temp);  
@@ -370,9 +371,9 @@ main()
       vscp_link_parser(&ctx[i], ctx[i].buf, &pnext);
 
       // Get event from input fifo      
-      vscp_fifo_read(&fifoEventsIn, &pev);
+      size_t len = vscp_fifo_read(&fifoEventsIn, &pev);
 
-      if (VSCP_ERROR_SUCCESS != vscp_fwhlp_convertEventToEventEx(pex, pev)) {
+      if (len && (VSCP_ERROR_SUCCESS != vscp_fwhlp_convertEventToEventEx(pex, pev))) {
         printf("Failed to convert event to ex\n");
         continue;
       }

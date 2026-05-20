@@ -8,7 +8,7 @@
         "command": "${userHome}/.pico-sdk/ninja/v1.12.1/ninja",
         "args": [
           "-C",
-          "${workspaceFolder}/build"
+          "${workspaceFolder}/firmware/build"
         ],
         "group": "build",
         "presentation": {
@@ -17,7 +17,7 @@
         },
         "problemMatcher": "$gcc",
         "windows": {
-          "command": "${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1/ninja.exe"
+          "command": "${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1/ninja"
         }
       },
       {
@@ -35,13 +35,13 @@
         },
         "problemMatcher": [],
         "windows": {
-          "command": "${env:USERPROFILE}/.pico-sdk/picotool/2.0.0/picotool/picotool.exe"
+          "command": "${env:USERPROFILE}/.pico-sdk/picotool/2.0.0/picotool/picotool"
         }
       },
       {
         "label": "Flash",
         "type": "process",
-        "command": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
+        "command": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd",
         "args": [
           "-s",
           "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
@@ -54,7 +54,7 @@
         ],
         "problemMatcher": [],
         "windows": {
-          "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd.exe"
+          "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd"
         }
       }
     ]

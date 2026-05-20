@@ -1,12 +1,12 @@
 [submodule "vscp-firmware"]
 	path = vscp-firmware
 	url = https://github.com/grodansparadis/vscp-firmware.git
-[submodule "third_party/pico-sdk"]
-	path = third_party/pico-sdk
+[submodule "firmware/third-party/pico-sdk"]
+	path = firmware/third-party/pico-sdk
 	url = https://github.com/raspberrypi/pico-sdk.git
-[submodule "third_party/WIZnet-PICO-C"]
-	path = third_party/WIZnet-PICO-C
+[submodule "firmware/third-party/WIZnet-PICO-C"]
+	path = firmware/third-party/WIZnet-PICO-C
 	url = https://github.com/WIZnet-ioNIC/WIZnet-PICO-C.git
-[submodule "third_party/vscp-firmware"]
-	path = third_party/vscp-firmware
+[submodule "firmware/third-party/vscp-firmware"]
+	path = firmware/third-party/vscp-firmware
 	url = https://github.com/grodansparadis/vscp-firmware.git
