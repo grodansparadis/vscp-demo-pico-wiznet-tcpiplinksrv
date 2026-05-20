@@ -31,8 +31,7 @@ jobs:
         run: |
           cmake -S firmware -B firmware/build \
             -G Ninja \
-            -DPICO_BOARD=pico \
-            -DCMAKE_TOOLCHAIN_FILE=firmware/third-party/pico-sdk/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake
+            -DPICO_BOARD=pico
 
       - name: Build
         run: cmake --build firmware/build --parallel
