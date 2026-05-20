@@ -5,18 +5,19 @@ else()
     set(USERHOME $ENV{HOME})
 endif()
 
-set(BOARD_NAME W5500_EVB_PICO)
-set(sdkVersion 2.1.0)
-set(toolchainVersion 13_3_Rel1)
-set(picotoolVersion 2.1.0)
+#set(BOARD_NAME W5500_EVB_PICO)
+set(BOARD_NAME W5100S-EVB)
+set(sdkVersion 2.2.0)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.2.0)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
+
 cmake_minimum_required(VERSION 3.13)
 
-#include(pico_sdk_import.cmake)
 # initialize the SDK directly
 include(third-party/pico-sdk/pico_sdk_init.cmake)
 

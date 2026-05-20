@@ -2,15 +2,9 @@
     {
         "name": "Pico",
         "compilers": {
-            "C": "${userHome}/.pico-sdk/toolchain/13_2_Rel1/bin/arm-none-eabi-gcc",
-            "CXX": "${userHome}/.pico-sdk/toolchain/13_2_Rel1/bin/arm-none-eabi-gcc"
+            "C": "/usr/bin/arm-none-eabi-gcc",
+            "CXX": "/usr/bin/arm-none-eabi-g++"
         },
-        "toolchainFile": "${env:HOME}/.pico-sdk/sdk/2.0.0/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake",
-        "environmentVariables": {
-            "PATH": "${command:raspberry-pi-pico.getEnvPath};${env:PATH}"
-        },
-        "cmakeSettings": {
-            "Python3_EXECUTABLE": "${command:raspberry-pi-pico.getPythonPath}"
-        }
+        "toolchainFile": "${workspaceFolder}/firmware/third-party/pico-sdk/cmake/preload/toolchains/pico_arm_cortex_m0plus_gcc.cmake"
     }
 ]

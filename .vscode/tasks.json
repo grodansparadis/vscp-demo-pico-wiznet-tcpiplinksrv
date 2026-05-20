@@ -2,10 +2,10 @@
     "version": "2.0.0",
     "tasks": [
       {
-        "label": "Compile Project",
+        "label": "Build Project",
         "type": "process",
         "isBuildCommand": true,
-        "command": "${userHome}/.pico-sdk/ninja/v1.12.1/ninja",
+        "command": "make",
         "args": [
           "-C",
           "${workspaceFolder}/firmware/build"
@@ -17,45 +17,54 @@
         },
         "problemMatcher": "$gcc",
         "windows": {
-          "command": "${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1/ninja"
+          "command": "make"
         }
       },
       {
-        "label": "Run Project",
+        "label": "Rebuild Project",
         "type": "process",
-        "command": "${env:HOME}/.pico-sdk/picotool/2.0.0/picotool/picotool",
+        "isBuildCommand": true,
+        "command": "make",
         "args": [
-          "load",
-          "${command:raspberry-pi-pico.launchTargetPath}",
-          "-fx"
+          "-C",
+          "${workspaceFolder}/firmware/build",
+          "clean",
+          "all"
         ],
+        "group": "build",
+        "presentation": {
+          "reveal": "always",
+          "panel": "dedicated"
+        },
+        "problemMatcher": "$gcc",
+        "windows": {
+          "command": "make"
+        }
+      },
+      {
+        "label": "Flash current project",
+        "type": "process",
+        "isBuildCommand": true,
+        "command": "openocd",
+        "args": [
+          "-s",
+          "/usr/local/share/openocd/scripts",
+          "-f",
+          "interface/cmsis-dap.cfg",
+          "-f",
+          "target/rp2040.cfg",
+          "-c",
+          "adapter speed 5000; program \"${workspaceFolder}/firmware/build/demo.elf\" verify reset exit"
+        ],
+        "group": "build",
         "presentation": {
           "reveal": "always",
           "panel": "dedicated"
         },
         "problemMatcher": [],
         "windows": {
-          "command": "${env:USERPROFILE}/.pico-sdk/picotool/2.0.0/picotool/picotool"
-        }
-      },
-      {
-        "label": "Flash",
-        "type": "process",
-        "command": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd",
-        "args": [
-          "-s",
-          "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
-          "-f",
-          "interface/cmsis-dap.cfg",
-          "-f",
-          "target/${command:raspberry-pi-pico.getTarget}.cfg",
-          "-c",
-          "adapter speed 5000; program \"${command:raspberry-pi-pico.launchTargetPath}\" verify reset exit"
-        ],
-        "problemMatcher": [],
-        "windows": {
-          "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd"
-        }
+          "command": "C:\\Program Files (x86)\\OpenOCD\\bin\\openocd.exe"
+        },
       }
     ]
 }
