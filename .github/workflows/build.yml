@@ -41,7 +41,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          bash .github/scripts/write-sha256sums.sh "SHA256SUMS-demo-firmware" <<'SHA256SUMS_PATTERNS'
+          bash "${GITHUB_WORKSPACE//\\//}/.github/scripts/write-sha256sums.sh" "SHA256SUMS-demo-firmware" <<'SHA256SUMS_PATTERNS'
           firmware/build/demo.uf2
           firmware/build/demo.elf
           SHA256SUMS_PATTERNS
